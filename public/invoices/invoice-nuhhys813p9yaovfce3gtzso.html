@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice INV-NUHHYS81</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      color: #333;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+      border-bottom: 2px solid #333;
+      padding-bottom: 20px;
+    }
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+    .invoice-info {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 30px;
+    }
+    .info-section {
+      flex: 1;
+    }
+    .info-section h3 {
+      font-size: 14px;
+      margin-bottom: 10px;
+      color: #666;
+    }
+    .info-section p {
+      font-size: 16px;
+      margin-bottom: 5px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    th {
+      background-color: #f5f5f5;
+      font-weight: bold;
+    }
+    .text-right {
+      text-align: right;
+    }
+    .total-section {
+      margin-top: 20px;
+      border-top: 2px solid #333;
+      padding-top: 20px;
+    }
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 18px;
+    }
+    .total-final {
+      font-size: 24px;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    .footer {
+      margin-top: 40px;
+      text-align: center;
+      color: #666;
+      font-size: 14px;
+    }
+    @media print {
+      body {
+        padding: 0;
+      }
+      .no-print {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>INVOICE</h1>
+    <p>Warehouse Management System</p>
+  </div>
+
+  <div class="invoice-info">
+    <div class="info-section">
+      <h3>Invoice Number</h3>
+      <p><strong>INV-NUHHYS81</strong></p>
+      <h3>Tanggal</h3>
+      <p>23 Desember 2025 pukul 00.26</p>
+    </div>
+    <div class="info-section">
+      <h3>Metode Pembayaran</h3>
+      <p><strong>QRIS</strong></p>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>No</th>
+        <th>Nama Barang</th>
+        <th class="text-right">Qty</th>
+        <th class="text-right">Harga</th>
+        <th class="text-right">Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>
+      
+        <tr>
+          <td>1</td>
+          <td>Corrupti id ut ven</td>
+          <td class="text-right">1</td>
+          <td class="text-right">Rp 40.000</td>
+          <td class="text-right">Rp 40.000</td>
+        </tr>
+      
+    </tbody>
+  </table>
+
+  <div class="total-section">
+    <div class="total-row">
+      <span>Total</span>
+      <span class="total-final">Rp 40.000</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Terima kasih atas pembelian Anda!</p>
+    <p>Invoice ini adalah bukti pembayaran yang sah</p>
+  </div>
+</body>
+</html>
