@@ -1,10 +1,10 @@
 import * as XLSX from 'xlsx';
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, writeFileSync, readFileSync } from 'fs';
 import { createId } from '@paralleldrive/cuid2';
 import { hashEmail, comparePassword } from './hash';
+import { getDataFilePath } from './data-path';
 
-const DB_PATH = join(process.cwd(), 'data', 'users.xlsx');
+const DB_PATH = getDataFilePath('users.xlsx');
 export interface User {
   id: string;
   username: string;
@@ -25,10 +25,8 @@ export interface UserWithoutPassword {
 // Inisialisasi file Excel jika belum ada
 function initializeExcel(): void {
   try {
-    const dir = join(process.cwd(), 'data');
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
+    // Ensure data directory exists (getDataDir handles this)
+    getDataFilePath('users.xlsx'); // This will ensure directory exists
 
     if (!existsSync(DB_PATH)) {
       const workbook = XLSX.utils.book_new();

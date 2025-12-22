@@ -2,8 +2,9 @@ import * as XLSX from 'xlsx';
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { createId } from '@paralleldrive/cuid2';
+import { getDataFilePath } from './data-path';
 
-const DB_PATH = join(process.cwd(), 'data', 'stock.xlsx');
+const DB_PATH = getDataFilePath('stock.xlsx');
 
 export interface Stock {
   id: string;
@@ -23,10 +24,8 @@ export interface StockWithoutDeleted extends Omit<Stock, 'deletedAt'> {}
 // Inisialisasi file Excel jika belum ada
 function initializeExcel(): void {
   try {
-    const dir = join(process.cwd(), 'data');
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
+    // Ensure data directory exists (getDataDir handles this)
+    getDataFilePath('stock.xlsx'); // This will ensure directory exists
 
     if (!existsSync(DB_PATH)) {
       const workbook = XLSX.utils.book_new();

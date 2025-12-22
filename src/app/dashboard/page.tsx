@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth";
 import UserInfo from "@/components/auth/UserInfo";
 import DashboardStats from "@/components/dashboard/DashboardStats";
+import DownloadExcel from "@/components/dashboard/DownloadExcel";
 
 export default async function DashboardPage() {
   // Proteksi route
@@ -19,7 +20,10 @@ export default async function DashboardPage() {
           <UserInfo />
         </div>
       </div>
-      <DashboardStats />
+      <div className="space-y-4 sm:space-y-6">
+        <DashboardStats />
+        <DownloadExcel />
+      </div>
     </div>
   );
 }
