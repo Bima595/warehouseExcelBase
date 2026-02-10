@@ -62,8 +62,8 @@ export async function getAuthUser(): Promise<UserWithoutPassword | null> {
       return null;
     }
 
-    // Cari user dari database Excel
-    const user = findUserById(userId);
+    // Cari user dari database Supabase
+    const user = await findUserById(userId);
     if (!user) {
       return null;
     }

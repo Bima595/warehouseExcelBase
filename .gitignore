@@ -33,6 +33,12 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# Database files (uncomment to ignore, or keep commented to commit)
+# Uncomment the line below if you DON'T want to commit Excel files
+# data/*.xlsx
+# But keep data directory structure
+!data/.gitkeep
+
 # vercel
 .vercel
 

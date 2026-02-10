@@ -13,23 +13,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { user, error } = await validateUser(email, password);
+    // Validasi user menggunakan password hash di tabel users
+    const { user, error: validationError } = await validateUser(email, password);
 
-    if (error === 'EMAIL_NOT_FOUND') {
+    if (validationError === 'EMAIL_NOT_FOUND') {
       return NextResponse.json(
         { error: 'Email tidak terdaftar' },
         { status: 401 }
       );
     }
 
-    if (error === 'PASSWORD_WRONG') {
+    if (validationError === 'PASSWORD_WRONG') {
       return NextResponse.json(
-        { error: 'Password salah' },
+        { error: 'Email atau password salah' },
         { status: 401 }
       );
     }
 
-    if (error === 'NOT_ADMIN') {
+    if (validationError === 'NOT_ADMIN') {
       return NextResponse.json(
         { error: 'Hanya admin yang dapat login' },
         { status: 403 }
@@ -56,20 +57,12 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
 
-    // Set cookie dengan user ID (untuk kompatibilitas)
-    response.cookies.set('auth', user.id, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 hari
-      path: '/',
-    });
+    // Generate token sederhana untuk kompatibilitas
+    const timestamp = Date.now();
+    const accessToken = `access_${user.id}_${timestamp}`;
+    const refreshToken = `refresh_${user.id}_${timestamp}`;
 
-    // Set accessToken dan refreshToken untuk Next.js 16
-    // Generate token sederhana (dalam production, gunakan JWT atau token yang lebih aman)
-    const accessToken = `access_${user.id}_${Date.now()}`;
-    const refreshToken = `refresh_${user.id}_${Date.now()}`;
-
+    // Set cookie dengan access token dan refresh token
     response.cookies.set('accessToken', accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -79,6 +72,15 @@ export async function POST(request: NextRequest) {
     });
 
     response.cookies.set('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 hari
+      path: '/',
+    });
+
+    // Set cookie dengan user ID (untuk kompatibilitas)
+    response.cookies.set('auth', user.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

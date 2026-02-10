@@ -89,3 +89,4 @@ export default function StockTable({ stocks, onEdit, onDelete }: StockTableProps
   );
 }
 
+

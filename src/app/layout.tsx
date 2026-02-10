@@ -6,6 +6,7 @@ import SettingsButton from "@/components/settings/SettingsButton";
 import CashierButton from "@/components/layout/CashierButton";
 import LayoutWrapper from "@/components/layout/LayoutWrapper";
 import { Toaster } from "@/components/ui/toaster";
+import { CartProvider } from "@/context/CartContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,12 +39,14 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
       >
-        <LayoutWrapper>
-          {children}
-        </LayoutWrapper>
-        <CashierButton />
-        <SettingsButton />
-        <Toaster />
+        <CartProvider>
+          <LayoutWrapper>
+            {children}
+          </LayoutWrapper>
+          <CashierButton />
+          <SettingsButton />
+          <Toaster />
+        </CartProvider>
         </ThemeProvider>
       </body>
     </html>

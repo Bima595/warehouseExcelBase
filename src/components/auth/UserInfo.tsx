@@ -9,7 +9,7 @@ export default async function UserInfo() {
   }
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-4 relative z-10">
       <div className="text-sm">
         <p className="font-medium text-black dark:text-zinc-50">
           {user.username}
@@ -20,4 +20,5 @@ export default async function UserInfo() {
     </div>
   );
 }
+
 

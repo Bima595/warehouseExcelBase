@@ -195,7 +195,7 @@ export function generateInvoiceHTML(transaction: Transaction): string {
 <body>
   <div class="header">
     <h1>INVOICE</h1>
-    <p>Toko Ira Endut Sambengimage.png</p>
+    <p>Toko Ira Endut Sambeng</p>
   </div>
 
   <div class="invoice-info">

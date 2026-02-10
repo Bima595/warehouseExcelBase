@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { getDashboardStats } from '@/app/actions/dashboard';
 import { useToast } from '@/hooks/use-toast';
-import { Package, ShoppingCart, TrendingUp, DollarSign } from 'lucide-react';
+import { Package, ShoppingCart, TrendingUp, DollarSign, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface DashboardStats {
   totalStockValue: number;
@@ -39,90 +40,107 @@ export default function DashboardStats() {
       if (result.success && result.stats) {
         setStats(result.stats);
       } else {
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: result.error || 'Gagal memuat data dashboard',
-        });
+        toast({ variant: 'destructive', title: 'Error', description: result.error || 'Gagal memuat data dashboard' });
       }
     } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Terjadi kesalahan saat memuat data dashboard',
-      });
+      toast({ variant: 'destructive', title: 'Error', description: 'Terjadi kesalahan saat memuat data dashboard' });
     } finally {
       setLoading(false);
     }
   };
 
+  const cards = [
+    {
+      title: 'Stock Value',
+      value: stats.totalStockValue,
+      subtitle: `${stats.totalItems} Items Terdaftar`,
+      icon: Package,
+      color: 'bg-indigo-500',
+      trend: '+12%',
+      isPositive: true
+    },
+    {
+      title: 'Total Sales',
+      value: stats.totalSales,
+      subtitle: `${stats.totalTransactions} Transaksi Berhasil`,
+      icon: ShoppingCart,
+      color: 'bg-emerald-500',
+      trend: '+8%',
+      isPositive: true
+    },
+    {
+      title: 'Gross Profit',
+      value: stats.labaKotor,
+      subtitle: 'Sales - Purchase Cost',
+      icon: TrendingUp,
+      color: 'bg-amber-500',
+      trend: '+15%',
+      isPositive: true
+    },
+    {
+      title: 'Net Revenue',
+      value: stats.labaBersih,
+      subtitle: 'Total After Deductions',
+      icon: DollarSign,
+      color: 'bg-rose-500',
+      trend: '-2%',
+      isPositive: false
+    }
+  ];
+
   if (loading) {
     return (
-      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="rounded-lg border bg-card p-4 sm:p-6 animate-pulse">
-            <div className="h-4 bg-muted rounded w-24 mb-2"></div>
-            <div className="h-8 bg-muted rounded w-32"></div>
-          </div>
+          <div key={i} className="h-48 rounded-[2.5rem] bg-white dark:bg-slate-900 border-none animate-pulse" />
         ))}
       </div>
     );
   }
 
   return (
-    <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-      <div className="rounded-lg border bg-card p-4 sm:p-6">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-base sm:text-lg font-semibold">Total Stock</h2>
-          <Package className="h-5 w-5 text-muted-foreground" />
-        </div>
-        <p className="text-2xl sm:text-3xl font-bold">
-          Rp {stats.totalStockValue.toLocaleString('id-ID')}
-        </p>
-        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-          {stats.totalItems} items
-        </p>
-      </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {cards.map((card, index) => {
+        const Icon = card.icon;
+        return (
+          <motion.div
+            key={card.title}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1 }}
+            className="group relative h-full"
+          >
+            <div className="h-full bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:shadow-[0_20px_40px_rgba(0,0,0,0.06)] transition-all duration-500 border border-slate-100 dark:border-slate-800 flex flex-col justify-between overflow-hidden">
+              <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-[0.03] group-hover:opacity-[0.08] transition-opacity bg-slate-900 dark:bg-white" />
+              
+              <div className="flex items-center justify-between mb-6">
+                <div className={`p-4 rounded-2xl ${card.color} text-white shadow-lg shadow-${card.color.split('-')[1]}-500/20`}>
+                  <Icon className="h-6 w-6" />
+                </div>
+                <div className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-widest ${card.isPositive ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  {card.isPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                  {card.trend}
+                </div>
+              </div>
 
-      <div className="rounded-lg border bg-card p-4 sm:p-6">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-base sm:text-lg font-semibold">Total Penjualan</h2>
-          <ShoppingCart className="h-5 w-5 text-muted-foreground" />
-        </div>
-        <p className="text-2xl sm:text-3xl font-bold">
-          Rp {stats.totalSales.toLocaleString('id-ID')}
-        </p>
-        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-          {stats.totalTransactions} transaksi
-        </p>
-      </div>
+              <div className="space-y-1">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                  {card.title}
+                </p>
+                <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter">
+                  Rp {card.value.toLocaleString('id-ID')}
+                </h3>
+              </div>
 
-      <div className="rounded-lg border bg-card p-4 sm:p-6">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-base sm:text-lg font-semibold">Laba Kotor</h2>
-          <TrendingUp className="h-5 w-5 text-muted-foreground" />
-        </div>
-        <p className="text-2xl sm:text-3xl font-bold text-green-600 dark:text-green-400">
-          Rp {stats.labaKotor.toLocaleString('id-ID')}
-        </p>
-        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-          Penjualan - Pembelian
-        </p>
-      </div>
-
-      <div className="rounded-lg border bg-card p-4 sm:p-6">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-base sm:text-lg font-semibold">Laba Bersih</h2>
-          <DollarSign className="h-5 w-5 text-muted-foreground" />
-        </div>
-        <p className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">
-          Rp {stats.labaBersih.toLocaleString('id-ID')}
-        </p>
-        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-          Laba setelah semua biaya
-        </p>
-      </div>
+              <div className="mt-6 pt-6 border-t border-slate-50 dark:border-slate-800">
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  {card.subtitle}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        );
+      })}
     </div>
   );
 }
-

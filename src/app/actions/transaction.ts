@@ -29,7 +29,7 @@ export async function checkoutAction(
     let total = 0;
 
     for (const item of items) {
-      const stock = findStockById(item.stockId);
+      const stock = await findStockById(item.stockId);
       if (!stock) {
         return { error: `Stock dengan ID ${item.stockId} tidak ditemukan` };
       }
@@ -52,10 +52,10 @@ export async function checkoutAction(
 
     // Kurangi stock
     for (const item of items) {
-      const stock = findStockById(item.stockId);
+      const stock = await findStockById(item.stockId);
       if (stock) {
         const newStock = stock.stock - item.quantity;
-        updateStock(item.stockId, { stock: newStock });
+        await updateStock(item.stockId, { stock: newStock });
       }
     }
 
@@ -64,7 +64,7 @@ export async function checkoutAction(
     const kasirUsername = currentUser?.username || 'Unknown';
 
     // Simpan transaksi
-    const transaction = writeTransaction({
+    const transaction = await writeTransaction({
       items: transactionItems,
       total,
       metodePembayaran,
@@ -76,7 +76,7 @@ export async function checkoutAction(
     try {
       invoicePath = saveInvoice(transaction);
       // Update transaction dengan invoice path
-      updateTransaction(transaction.id, { invoicePath });
+      await updateTransaction(transaction.id, { invoicePath });
     } catch (error) {
       console.error('Error generating invoice:', error);
       // Invoice error tidak fatal, transaksi tetap berhasil
@@ -95,7 +95,7 @@ export async function checkoutAction(
 
 export async function getTransactionsAction() {
   try {
-    const transactions = readTransactions();
+    const transactions = await readTransactions();
     // Sort by createdAt descending (terbaru dulu)
     const sortedTransactions = transactions.sort((a, b) => 
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -111,7 +111,7 @@ export async function getTransactionsAction() {
 
 export async function cancelTransactionAction(transactionId: string) {
   try {
-    const transaction = findTransactionById(transactionId);
+    const transaction = await findTransactionById(transactionId);
     
     if (!transaction) {
       return { error: 'Transaksi tidak ditemukan' };
@@ -119,15 +119,15 @@ export async function cancelTransactionAction(transactionId: string) {
 
     // Kembalikan stock untuk setiap item
     for (const item of transaction.items) {
-      const stock = findStockById(item.stockId);
+      const stock = await findStockById(item.stockId);
       if (stock) {
         const newStock = stock.stock + item.quantity;
-        updateStock(item.stockId, { stock: newStock });
+        await updateStock(item.stockId, { stock: newStock });
       }
     }
 
     // Update transaction dengan status cancelled
-    updateTransaction(transactionId, { 
+    await updateTransaction(transactionId, { 
       cancelledAt: new Date().toISOString(),
     });
 

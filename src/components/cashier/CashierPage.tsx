@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Search, ShoppingCart, Plus, Minus, X, Menu } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, X, ImageIcon, Loader2, PackageSearch } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -17,62 +18,40 @@ import { useToast } from '@/hooks/use-toast';
 import { getStocksAction } from '@/app/actions/stock';
 import type { StockWithoutDeleted } from '@/lib/stock-db';
 import Image from 'next/image';
-import { ImageIcon } from 'lucide-react';
 import CheckoutDialog from './CheckoutDialog';
-
-export interface CartItem {
-  stock: StockWithoutDeleted;
-  quantity: number;
-}
+import { useCart } from '@/hooks/use-cart';
 
 export default function CashierPage() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const { cart, addToCart, updateQuantity, removeFromCart, clearCart, getTotal, cartItemCount } = useCart();
+  
   const [stocks, setStocks] = useState<StockWithoutDeleted[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
 
-  // Load stocks
-  useEffect(() => {
-    async function loadStocksData() {
-      try {
-        const result = await getStocksAction();
-        if (result.success && result.stocks) {
-          setStocks(result.stocks);
-        }
-      } catch (error) {
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'Gagal memuat data stock',
-        });
-      } finally {
-        setLoading(false);
+  const loadStocksData = useCallback(async () => {
+    try {
+      const result = await getStocksAction();
+      if (result.success && result.stocks) {
+        setStocks(result.stocks);
       }
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Gagal memuat data stock',
+      });
+    } finally {
+      setLoading(false);
     }
-    loadStocksData();
   }, [toast]);
 
-  const addToCart = (stock: StockWithoutDeleted) => {
-    setCart((prevCart) => {
-      const existingItem = prevCart.find((item) => item.stock.id === stock.id);
-      if (existingItem) {
-        return prevCart.map((item) =>
-          item.stock.id === stock.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-      }
-      return [...prevCart, { stock, quantity: 1 }];
-    });
-    // Open cart on mobile when adding item
-    if (window.innerWidth < 1024) {
-      setCartOpen(true);
-    }
-  };
+  useEffect(() => {
+    loadStocksData();
+  }, [loadStocksData]);
 
   // Auto-add from QR scan
   useEffect(() => {
@@ -82,442 +61,128 @@ export default function CashierPage() {
       if (stock) {
         addToCart(stock);
         toast({
-          variant: 'success',
           title: 'Barang Ditambahkan',
           description: `${stock.namaBarang} telah ditambahkan ke keranjang`,
         });
-        // Remove query param
         window.history.replaceState({}, '', '/cashier');
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, stocks]);
+  }, [searchParams, stocks, addToCart, toast]);
 
-  // Load cart from localStorage on mount
-  useEffect(() => {
-    const savedCart = localStorage.getItem('cashier_cart');
-    if (savedCart) {
-      try {
-        setCart(JSON.parse(savedCart));
-      } catch (error) {
-        console.error('Error loading cart from localStorage:', error);
-      }
-    }
-  }, []);
-
-  // Save cart to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('cashier_cart', JSON.stringify(cart));
-  }, [cart]);
-
-
-  const updateQuantity = (stockId: string, delta: number) => {
-    setCart((prevCart) => {
-      const item = prevCart.find((item) => item.stock.id === stockId);
-      if (!item) return prevCart;
-
-      const newQuantity = item.quantity + delta;
-      if (newQuantity <= 0) {
-        return prevCart.filter((item) => item.stock.id !== stockId);
-      }
-
-      return prevCart.map((item) =>
-        item.stock.id === stockId
-          ? { ...item, quantity: newQuantity }
-          : item
-      );
-    });
-  };
-
-  const removeFromCart = (stockId: string) => {
-    setCart((prevCart) => prevCart.filter((item) => item.stock.id !== stockId));
-  };
-
-  const getTotal = () => {
-    return cart.reduce((total, item) => total + item.stock.hargaJual * item.quantity, 0);
-  };
-
-  const handleCheckout = () => {
-    if (cart.length === 0) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Keranjang kosong',
-      });
-      return;
-    }
-    setCheckoutOpen(true);
-  };
-
-  const handleCheckoutSuccess = () => {
-    setCart([]);
-    loadStocks(); // Reload stocks untuk update quantity
-  };
-
-  const loadStocks = async () => {
-    try {
-      const result = await getStocksAction();
-      if (result.success && result.stocks) {
-        setStocks(result.stocks);
-      }
-    } catch (error) {
-      console.error('Error loading stocks:', error);
-    }
-  };
-
-  const filteredStocks = stocks.filter((stock) =>
-    stock.namaBarang.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredStocks = useMemo(() => 
+    stocks.filter((stock) =>
+      stock.namaBarang.toLowerCase().includes(searchQuery.toLowerCase())
+    ), [stocks, searchQuery]
   );
 
-  const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const handleCheckoutSuccess = () => {
+    clearCart();
+    loadStocksData();
+  };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background w-full">
+    <div className="flex h-screen overflow-hidden bg-[#F8FAFC] dark:bg-[#020617] w-full font-sans">
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden w-full min-w-0">
         {/* Header */}
-        <header className="border-b bg-background px-4 sm:px-6 py-3 sm:py-4 sticky top-0 z-10 w-full max-w-full">
-          <div className="flex items-center gap-3 sm:gap-4 w-full max-w-full">
-            <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-              <Search className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
+        <header className="border-b border-slate-200/60 dark:border-slate-800/60 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl px-4 sm:px-8 py-4 sm:py-6 sticky top-0 z-10 w-full shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+          <div className="flex items-center gap-4 w-full">
+            <div className="flex-1 min-w-0 relative group">
+              <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                <Search className="h-5 w-5 text-slate-400 group-focus-within:text-primary transition-colors" />
+              </div>
               <Input
                 type="text"
-                placeholder="Cari barang..."
+                placeholder="Cari produk di gudang..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1 h-9 sm:h-10 text-sm sm:text-base min-w-0"
+                className="w-full pl-12 h-12 bg-slate-100/50 dark:bg-slate-900/50 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all rounded-2xl text-base"
               />
             </div>
-            {/* Mobile Cart Button */}
+            
+            {/* Mobile Cart Trigger */}
             <Sheet open={cartOpen} onOpenChange={setCartOpen}>
               <SheetTrigger asChild>
                 <Button
                   variant="outline"
                   size="icon"
-                  className="relative sm:hidden h-9 w-9"
+                  className="relative lg:hidden h-12 w-12 rounded-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition-all"
                 >
-                  <ShoppingCart className="h-4 w-4" />
-                  {cartItemCount > 0 && (
-                    <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
-                      {cartItemCount > 9 ? '9+' : cartItemCount}
-                    </span>
-                  )}
+                  <ShoppingCart className="h-5 w-5" />
+                  <AnimatePresence>
+                    {cartItemCount > 0 && (
+                      <motion.span
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0 }}
+                        className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-primary text-white text-[10px] font-black flex items-center justify-center shadow-lg border-2 border-white dark:border-slate-900"
+                      >
+                        {cartItemCount > 99 ? '99+' : cartItemCount}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-full sm:w-96 p-0 flex flex-col">
-                <SheetHeader className="p-4 sm:p-6 border-b bg-muted/50">
-                  <div className="flex items-center gap-2">
-                    <ShoppingCart className="h-5 w-5" />
-                    <SheetTitle className="text-xl font-bold">Cart</SheetTitle>
-                    {cart.length > 0 && (
-                      <span className="ml-auto text-sm text-muted-foreground">
-                        {cart.length} {cart.length === 1 ? 'item' : 'items'}
-                      </span>
-                    )}
-                  </div>
-                </SheetHeader>
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                  {cart.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-                      <ShoppingCart className="h-20 w-20 mb-4 opacity-30" />
-                      <p className="text-base font-medium">Keranjang kosong</p>
-                      <p className="text-sm mt-1">Tambahkan barang ke keranjang</p>
-                    </div>
-                  ) : (
-                    cart.map((item) => (
-                      <Card key={item.stock.id} className="overflow-hidden">
-                        <div className="flex items-start gap-3 p-3">
-                          <div className="relative h-20 w-20 rounded-lg overflow-hidden bg-muted flex-shrink-0 border">
-                            {item.stock.gambar ? (
-                              <Image
-                                src={item.stock.gambar}
-                                alt={item.stock.namaBarang}
-                                fill
-                                className="object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-full items-center justify-center">
-                                <ImageIcon className="h-8 w-8 text-muted-foreground" />
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0 space-y-2">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm leading-tight line-clamp-2">
-                                  {item.stock.namaBarang}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Rp {item.stock.hargaJual.toLocaleString('id-ID')} / item
-                                </p>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => removeFromCart(item.stock.id)}
-                                className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  onClick={() => updateQuantity(item.stock.id, -1)}
-                                  className="h-7 w-7"
-                                >
-                                  <Minus className="h-3 w-3" />
-                                </Button>
-                                <span className="text-sm font-semibold w-8 text-center">
-                                  {item.quantity}
-                                </span>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  onClick={() => updateQuantity(item.stock.id, 1)}
-                                  className="h-7 w-7"
-                                  disabled={item.stock.stock > 0 && item.quantity >= item.stock.stock}
-                                >
-                                  <Plus className="h-3 w-3" />
-                                </Button>
-                              </div>
-                              <p className="text-sm font-bold text-primary">
-                                Rp {(item.stock.hargaJual * item.quantity).toLocaleString('id-ID')}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </Card>
-                    ))
-                  )}
-                </div>
-                {cart.length > 0 && (
-                  <div className="border-t bg-muted/30 p-4 space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-base">
-                        <span className="text-muted-foreground">Subtotal</span>
-                        <span className="font-semibold">Rp {getTotal().toLocaleString('id-ID')}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-lg font-bold pt-2 border-t">
-                        <span>Total</span>
-                        <span className="text-primary">Rp {getTotal().toLocaleString('id-ID')}</span>
-                      </div>
-                    </div>
-                    <Button onClick={() => { handleCheckout(); setCartOpen(false); }} className="w-full" size="lg" variant="default">
-                      Checkout
-                    </Button>
-                  </div>
-                )}
+              <SheetContent side="right" className="w-full sm:w-[440px] p-0 border-none bg-white dark:bg-slate-950 flex flex-col">
+                <CartSidebarContent 
+                  cart={cart} 
+                  updateQuantity={updateQuantity} 
+                  removeFromCart={removeFromCart} 
+                  total={getTotal()} 
+                  onCheckout={() => { setCheckoutOpen(true); setCartOpen(false); }}
+                />
               </SheetContent>
             </Sheet>
           </div>
         </header>
 
         {/* Product Grid */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-6 w-full max-w-full">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-transparent custom-scrollbar">
           {loading ? (
-            <div className="flex min-h-[400px] items-center justify-center">
-              <div className="text-center">
-                <div className="mb-4 inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent"></div>
-                <p className="text-sm text-muted-foreground">Memuat data...</p>
+            <div className="flex h-full items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-10 w-10 text-primary animate-spin" />
+                <p className="text-slate-500 font-medium animate-pulse">Menghubungkan ke gudang...</p>
               </div>
             </div>
           ) : filteredStocks.length === 0 ? (
-            <div className="flex min-h-[400px] items-center justify-center">
-              <div className="text-center">
-                <Search className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-                <p className="text-muted-foreground">
-                  {searchQuery ? 'Tidak ada barang yang ditemukan' : 'Belum ada data stock'}
-                </p>
+            <div className="flex h-full flex-col items-center justify-center text-center p-8">
+              <div className="w-24 h-24 bg-slate-100 dark:bg-slate-900 rounded-3xl flex items-center justify-center mb-6">
+                <PackageSearch className="h-12 w-12 text-slate-300 dark:text-slate-700" />
               </div>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">Produk tidak ditemukan</h3>
+              <p className="text-slate-500 max-w-xs">Coba gunakan kata kunci lain atau pastikan stok produk tersedia.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-3 lg:gap-4 w-full max-w-full">
-              {filteredStocks.map((stock) => {
-                const cartItem = cart.find((item) => item.stock.id === stock.id);
-                const quantity = cartItem?.quantity || 0;
-
-                return (
-                  <Card key={stock.id} className="group overflow-hidden transition-all hover:shadow-lg border-2 hover:border-primary/50">
-                    <div className="relative aspect-square w-full overflow-hidden bg-muted">
-                      {stock.gambar ? (
-                        <Image
-                          src={stock.gambar}
-                          alt={stock.namaBarang}
-                          fill
-                          className="object-cover transition-transform group-hover:scale-105"
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center bg-muted">
-                          <ImageIcon className="h-16 w-16 text-muted-foreground/50" />
-                        </div>
-                      )}
-                    </div>
-                    <CardContent className="p-2 sm:p-3 lg:p-4 space-y-2 sm:space-y-3">
-                      <h3 className="font-semibold text-xs sm:text-sm line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem] leading-tight">
-                        {stock.namaBarang}
-                      </h3>
-                      <div className="flex items-baseline justify-between gap-1">
-                        <p className="text-sm sm:text-base lg:text-lg font-bold text-primary">
-                          Rp {stock.hargaJual.toLocaleString('id-ID')}
-                        </p>
-                        {stock.stock > 0 && (
-                          <span className="text-[10px] sm:text-xs text-muted-foreground shrink-0">
-                            Stok: {stock.stock}
-                          </span>
-                        )}
-                      </div>
-                      {quantity > 0 ? (
-                        <div className="flex items-center gap-1 sm:gap-2 pt-1 sm:pt-2">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => updateQuantity(stock.id, -1)}
-                            className="h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 shrink-0"
-                          >
-                            <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </Button>
-                          <span className="flex-1 text-center font-semibold text-sm sm:text-base">
-                            {quantity}
-                          </span>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => updateQuantity(stock.id, 1)}
-                            className="h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 shrink-0"
-                            disabled={stock.stock > 0 && quantity >= stock.stock}
-                          >
-                            <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button
-                          onClick={() => addToCart(stock)}
-                          className="w-full text-xs sm:text-sm"
-                          disabled={stock.stock === 0}
-                          size="sm"
-                        >
-                          {stock.stock === 0 ? 'Stok Habis' : 'Add to Cart'}
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+            <motion.div 
+              layout
+              className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6"
+            >
+              <AnimatePresence mode="popLayout">
+                {filteredStocks.map((stock) => (
+                  <ProductCard 
+                    key={stock.id} 
+                    stock={stock} 
+                    cartQuantity={cart.find(i => i.stock.id === stock.id)?.quantity || 0}
+                    onAdd={() => addToCart(stock)}
+                    onUpdate={(delta) => updateQuantity(stock.id, delta)}
+                  />
+                ))}
+              </AnimatePresence>
+            </motion.div>
           )}
         </div>
       </div>
 
-      {/* Shopping Cart Sidebar - Desktop Only */}
-      <aside className="hidden lg:flex w-96 border-l bg-background flex-col shadow-lg shrink-0">
-        <div className="p-6 border-b bg-muted/50">
-          <div className="flex items-center gap-2">
-            <ShoppingCart className="h-5 w-5" />
-            <h2 className="text-xl font-bold">Cart</h2>
-            {cart.length > 0 && (
-              <span className="ml-auto text-sm text-muted-foreground">
-                {cart.length} {cart.length === 1 ? 'item' : 'items'}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {cart.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-              <ShoppingCart className="h-20 w-20 mb-4 opacity-30" />
-              <p className="text-base font-medium">Keranjang kosong</p>
-              <p className="text-sm mt-1">Tambahkan barang ke keranjang</p>
-            </div>
-          ) : (
-            cart.map((item) => (
-              <Card key={item.stock.id} className="overflow-hidden">
-                <div className="flex items-start gap-3 p-3">
-                  <div className="relative h-20 w-20 rounded-lg overflow-hidden bg-muted flex-shrink-0 border">
-                    {item.stock.gambar ? (
-                      <Image
-                        src={item.stock.gambar}
-                        alt={item.stock.namaBarang}
-                        fill
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center">
-                        <ImageIcon className="h-8 w-8 text-muted-foreground" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm leading-tight line-clamp-2">
-                          {item.stock.namaBarang}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Rp {item.stock.hargaJual.toLocaleString('id-ID')} / item
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeFromCart(item.stock.id)}
-                        className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => updateQuantity(item.stock.id, -1)}
-                          className="h-7 w-7"
-                        >
-                          <Minus className="h-3 w-3" />
-                        </Button>
-                        <span className="text-sm font-semibold w-8 text-center">
-                          {item.quantity}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => updateQuantity(item.stock.id, 1)}
-                          className="h-7 w-7"
-                          disabled={item.stock.stock > 0 && item.quantity >= item.stock.stock}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      <p className="text-sm font-bold text-primary">
-                        Rp {(item.stock.hargaJual * item.quantity).toLocaleString('id-ID')}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            ))
-          )}
-        </div>
-        {cart.length > 0 && (
-          <div className="border-t bg-muted/30 p-6 space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-base">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span className="font-semibold">Rp {getTotal().toLocaleString('id-ID')}</span>
-              </div>
-              <div className="flex items-center justify-between text-lg font-bold pt-2 border-t">
-                <span>Total</span>
-                <span className="text-primary">Rp {getTotal().toLocaleString('id-ID')}</span>
-              </div>
-            </div>
-            <Button onClick={handleCheckout} className="w-full" size="lg" variant="default">
-              Checkout
-            </Button>
-          </div>
-        )}
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:flex w-[440px] border-l border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-950 flex-col shadow-[-4px_0_24px_rgba(0,0,0,0.02)]">
+        <CartSidebarContent 
+          cart={cart} 
+          updateQuantity={updateQuantity} 
+          removeFromCart={removeFromCart} 
+          total={getTotal()} 
+          onCheckout={() => setCheckoutOpen(true)}
+        />
       </aside>
 
       <CheckoutDialog
@@ -531,3 +196,201 @@ export default function CashierPage() {
   );
 }
 
+function ProductCard({ stock, cartQuantity, onAdd, onUpdate }: { 
+  stock: StockWithoutDeleted, 
+  cartQuantity: number, 
+  onAdd: () => void,
+  onUpdate: (delta: number) => void
+}) {
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      whileHover={{ y: -4 }}
+      className="group relative"
+    >
+      <Card className="h-full border-none bg-white dark:bg-slate-900 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_24px_rgba(0,0,0,0.08)] transition-all duration-300 rounded-[2rem] overflow-hidden">
+        <div className="relative aspect-[4/3] overflow-hidden">
+          {stock.gambar ? (
+            <Image
+              src={stock.gambar}
+              alt={stock.namaBarang}
+              fill
+              className="object-cover transition-transform duration-500 group-hover:scale-110"
+              sizes="(max-width: 1024px) 100vw, 300px"
+            />
+          ) : (
+            <div className="w-full h-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+              <ImageIcon className="h-12 w-12 text-slate-300 dark:text-slate-700" />
+            </div>
+          )}
+          
+          {/* Badge Stock */}
+          <div className="absolute top-4 right-4 flex flex-col gap-2">
+            <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider backdrop-blur-md shadow-sm ${
+              stock.stock > 10 
+                ? 'bg-white/90 text-slate-900' 
+                : stock.stock > 0 
+                  ? 'bg-amber-500/90 text-white' 
+                  : 'bg-red-500/90 text-white'
+            }`}>
+              {stock.stock === 0 ? 'Habis' : `Stok: ${stock.stock}`}
+            </span>
+          </div>
+        </div>
+
+        <CardContent className="p-6">
+          <div className="mb-4">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 line-clamp-2 leading-tight min-h-[2.75rem]">
+              {stock.namaBarang}
+            </h3>
+            <p className="text-2xl font-black text-primary tracking-tighter mt-1">
+              Rp {stock.hargaJual.toLocaleString('id-ID')}
+            </p>
+          </div>
+
+          {cartQuantity > 0 ? (
+            <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-950 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onUpdate(-1)}
+                className="h-10 w-10 rounded-xl hover:bg-white dark:hover:bg-slate-800 shadow-sm transition-all"
+              >
+                <Minus className="h-4 w-4" />
+              </Button>
+              <span className="flex-1 text-center font-black text-lg text-slate-900 dark:text-slate-100">
+                {cartQuantity}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onUpdate(1)}
+                disabled={stock.stock > 0 && cartQuantity >= stock.stock}
+                className="h-10 w-10 rounded-xl hover:bg-white dark:hover:bg-slate-800 shadow-sm transition-all"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <Button
+              onClick={onAdd}
+              disabled={stock.stock === 0}
+              className="w-full h-12 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-primary dark:hover:bg-primary hover:text-white transition-all font-bold text-base shadow-lg shadow-slate-900/5"
+            >
+              {stock.stock === 0 ? 'Stok Kosong' : (
+                <div className="flex items-center gap-2">
+                  <ShoppingCart className="h-5 w-5" />
+                  <span>Tambah</span>
+                </div>
+              )}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+function CartSidebarContent({ cart, updateQuantity, removeFromCart, total, onCheckout }: any) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="p-8 border-b border-slate-200/60 dark:border-slate-800/60">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-slate-100">Checkout</h2>
+            <p className="text-sm text-slate-500 font-medium">Ringkasan belanja anda</p>
+          </div>
+          <div className="h-12 w-12 bg-primary/10 rounded-2xl flex items-center justify-center">
+            <ShoppingCart className="h-6 w-6 text-primary" />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+        <AnimatePresence initial={false}>
+          {cart.length === 0 ? (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="h-full flex flex-col items-center justify-center text-center p-8"
+            >
+              <div className="w-20 h-20 bg-slate-50 dark:bg-slate-900 rounded-3xl flex items-center justify-center mb-4">
+                <ShoppingCart className="h-10 w-10 text-slate-200 dark:text-slate-800" />
+              </div>
+              <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Keranjang Kosong</p>
+            </motion.div>
+          ) : (
+            cart.map((item: any) => (
+              <motion.div
+                key={item.stock.id}
+                layout
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="group relative bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-all"
+              >
+                <div className="flex gap-4">
+                  <div className="h-16 w-16 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 shrink-0">
+                    {item.stock.gambar ? (
+                      <Image src={item.stock.gambar} alt={item.stock.namaBarang} width={64} height={64} className="object-cover h-full w-full" />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center"><ImageIcon className="h-6 w-6 text-slate-300" /></div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-slate-900 dark:text-slate-100 truncate text-sm">{item.stock.namaBarang}</h4>
+                    <p className="text-xs font-medium text-slate-500 mt-0.5">
+                      Rp {item.stock.hargaJual.toLocaleString('id-ID')}
+                    </p>
+                    <div className="flex items-center justify-between mt-3">
+                      <div className="flex items-center bg-slate-50 dark:bg-slate-950 rounded-xl px-1 border border-slate-100 dark:border-slate-800">
+                        <Button variant="ghost" size="icon" onClick={() => updateQuantity(item.stock.id, -1)} className="h-7 w-7 rounded-lg"><Minus className="h-3 w-3" /></Button>
+                        <span className="w-8 text-center text-xs font-black">{item.quantity}</span>
+                        <Button variant="ghost" size="icon" onClick={() => updateQuantity(item.stock.id, 1)} className="h-7 w-7 rounded-lg"><Plus className="h-3 w-3" /></Button>
+                      </div>
+                      <p className="text-sm font-black text-primary">Rp {(item.stock.hargaJual * item.quantity).toLocaleString('id-ID')}</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeFromCart(item.stock.id)}
+                    className="absolute -top-2 -right-2 h-8 w-8 bg-white dark:bg-slate-800 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-all text-slate-400 hover:text-red-500"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </motion.div>
+            ))
+          )}
+        </AnimatePresence>
+      </div>
+
+      {cart.length > 0 && (
+        <div className="p-8 bg-slate-50 dark:bg-slate-900/50 space-y-6">
+          <div className="space-y-3">
+            <div className="flex justify-between text-slate-500 font-bold uppercase tracking-widest text-[10px]">
+              <span>Subtotal</span>
+              <span>Rp {total.toLocaleString('id-ID')}</span>
+            </div>
+            <div className="flex justify-between items-end">
+              <span className="text-lg font-bold text-slate-900 dark:text-slate-100">Total</span>
+              <span className="text-3xl font-black text-primary tracking-tighter">Rp {total.toLocaleString('id-ID')}</span>
+            </div>
+          </div>
+          <Button 
+            onClick={onCheckout}
+            className="w-full h-16 rounded-[1.5rem] bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-primary dark:hover:bg-primary hover:text-white transition-all font-black text-lg shadow-2xl shadow-slate-900/20"
+          >
+            Selesaikan Pesanan
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// End of component

@@ -1,15 +1,10 @@
-import * as XLSX from 'xlsx';
-import { existsSync, writeFileSync, readFileSync } from 'fs';
-import { createId } from '@paralleldrive/cuid2';
-import { hashEmail, comparePassword } from './hash';
-import { getDataFilePath } from './data-path';
+import { supabase } from './supabase';
 
-const DB_PATH = getDataFilePath('users.xlsx');
 export interface User {
   id: string;
   username: string;
   email: string;
-  password: string;
+  password: string; // Password yang sudah di-hash
   role?: string;
   createdAt: string;
 }
@@ -22,220 +17,218 @@ export interface UserWithoutPassword {
   createdAt: string;
 }
 
-// Inisialisasi file Excel jika belum ada
-function initializeExcel(): void {
+// Baca semua user dari Supabase (exclude soft deleted)
+export async function readUsers(): Promise<User[]> {
   try {
-    // Ensure data directory exists (getDataDir handles this)
-    getDataFilePath('users.xlsx'); // This will ensure directory exists
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .is('deleted_at', null) // Filter out soft deleted users
+      .order('created_at', { ascending: false });
 
-    if (!existsSync(DB_PATH)) {
-      const workbook = XLSX.utils.book_new();
-      const worksheet = XLSX.utils.json_to_sheet<User>([]);
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
-      
-      // Gunakan writeFileSync dengan buffer untuk lebih reliable
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-      writeFileSync(DB_PATH, buffer);
+    if (error) {
+      console.error('Error reading users:', error);
+      return [];
     }
+
+    // Transform data dari Supabase ke format User
+    return (data || []).map((user) => ({
+      id: user.id,
+      username: user.username || '',
+      email: user.email || '',
+      password: user.password || '', // Password hash dari database
+      role: user.role || 'unemployees',
+      createdAt: user.created_at || new Date().toISOString(),
+    }));
   } catch (error) {
-    console.error('Error initializing Excel:', error);
-    throw new Error('Gagal menginisialisasi database');
+    console.error('Error reading users:', error);
+    return [];
   }
 }
 
-// Baca semua user dari Excel dengan retry mechanism
-export function readUsers(): User[] {
-  let retries = 3;
-  let lastError: Error | null = null;
-  
-  while (retries > 0) {
-    try {
-      initializeExcel();
-      
-      // Gunakan readFileSync dengan buffer untuk lebih reliable
-      const fileBuffer = readFileSync(DB_PATH);
-      const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      
-      const data = XLSX.utils.sheet_to_json<User>(worksheet);
-      return data;
-    } catch (error) {
-      lastError = error as Error;
-      retries--;
-      
-      if (retries > 0) {
-        // Tunggu sebentar sebelum retry
-        const waitTime = (4 - retries) * 100; // 100ms, 200ms, 300ms
-        const start = Date.now();
-        while (Date.now() - start < waitTime) {
-          // Busy wait
-        }
-      }
+// Tulis user baru ke Supabase
+// Note: user.password harus sudah di-hash sebelum dipanggil
+export async function writeUser(user: Omit<User, 'id' | 'createdAt'> & { role?: string }): Promise<User> {
+  try {
+    const { createId } = await import('@paralleldrive/cuid2');
+    const id = createId();
+
+    const { data, error } = await supabase
+      .from('users')
+      .insert({
+        id, // Generate ID baru (tidak perlu reference ke auth.users)
+        username: user.username,
+        email: user.email,
+        password: user.password, // Password yang sudah di-hash
+        role: user.role || 'unemployees',
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error writing user:', error);
+      throw new Error(`Gagal menyimpan user ke database: ${error.message}`);
     }
+
+    if (!data) {
+      throw new Error('Gagal menyimpan user ke database: tidak ada data yang dikembalikan');
+    }
+
+    return {
+      id: data.id,
+      username: data.username || '',
+      email: data.email || '',
+      password: data.password || '', // Password hash disimpan di database
+      role: data.role || 'unemployees',
+      createdAt: data.created_at || new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error('Error writing user:', error);
+    throw error instanceof Error ? error : new Error('Gagal menyimpan user ke database');
   }
-  
-  console.error('Error reading users after retries:', lastError);
-  return [];
 }
 
-// Tulis user baru ke Excel dengan retry mechanism
-// Note: user.password dan user.email sudah harus di-hash sebelum dipanggil
-export function writeUser(user: Omit<User, 'id' | 'createdAt'> & { role?: string }): User {
-  let retries = 3;
-  let lastError: Error | null = null;
-  
-  while (retries > 0) {
-    try {
-      initializeExcel();
+// Cari user berdasarkan email
+export async function findUserByEmail(email: string): Promise<User | undefined> {
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', normalizedEmail)
+      .maybeSingle(); // maybeSingle() tidak throw error jika tidak ada data
+
+    if (data && !error) {
+      // Debug: log data yang diambil dari database
+      console.log('User found by email:', {
+        id: data.id,
+        email: data.email,
+        role: data.role,
+        roleType: typeof data.role,
+        roleLength: data.role?.length
+      });
       
-      // Baca users dengan retry
-      const fileBuffer = readFileSync(DB_PATH);
-      const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const users = XLSX.utils.sheet_to_json<User>(worksheet);
-      
-      // Generate ID menggunakan CUID
-      const id = createId();
-      const createdAt = new Date().toISOString();
-      
-      const newUser: User = {
-        ...user,
-        role: user.role || 'unemployees', // Default role
-        id,
-        createdAt,
+      return {
+        id: data.id,
+        username: data.username || '',
+        email: data.email || '',
+        password: data.password || '', // Password hash dari database
+        role: (data.role || 'unemployees').trim(), // Trim whitespace dari role
+        createdAt: data.created_at || new Date().toISOString(),
       };
-      
-      users.push(newUser);
-      
-      // Tulis kembali ke file
-      const newWorkbook = XLSX.utils.book_new();
-      const newWorksheet = XLSX.utils.json_to_sheet(users);
-      XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, 'Users');
-      
-      // Gunakan writeFileSync dengan buffer untuk lebih reliable
-      const buffer = XLSX.write(newWorkbook, { type: 'buffer', bookType: 'xlsx' });
-      writeFileSync(DB_PATH, buffer);
-      
-      return newUser;
-    } catch (error) {
-      lastError = error as Error;
-      retries--;
-      
-      if (retries > 0) {
-        // Tunggu sebentar sebelum retry
-        const waitTime = (4 - retries) * 100; // 100ms, 200ms, 300ms
-        const start = Date.now();
-        while (Date.now() - start < waitTime) {
-          // Busy wait
-        }
-      }
     }
+    
+    return undefined;
+  } catch (error) {
+    console.error('Error finding user by email:', error);
+    return undefined;
   }
-  
-  console.error('Error writing user after retries:', lastError);
-  throw new Error('Gagal menyimpan user ke database. Pastikan file Excel tidak sedang dibuka.');
 }
 
-// Get admin user from environment variables
-function getAdminUser(): User | null {
-  const adminEmail = process.env.ADMIN_EMAIL;
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+export async function findUserByUsername(username: string): Promise<User | undefined> {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username.toLowerCase().trim())
+      .single();
 
-  if (!adminEmail || !adminPassword) {
-    return null;
-  }
-
-  // Hash email untuk admin (konsisten dengan user lain)
-  const hashedEmail = hashEmail(adminEmail);
-
-  return {
-    id: 'admin_hardcoded',
-    username: adminUsername,
-    email: hashedEmail, // Email di-hash
-    password: adminPassword, // Password tetap plain untuk comparison
-    role: 'admin',
-    createdAt: new Date().toISOString(),
-  };
-}
-
-// Cari user berdasarkan email (dengan hash comparison, termasuk admin dari env)
-export function findUserByEmail(email: string): User | undefined {
-  // Cek admin user dari env terlebih dahulu
-  const adminUser = getAdminUser();
-  if (adminUser) {
-    const adminEmail = process.env.ADMIN_EMAIL;
-    // Compare email (case-insensitive dan trim)
-    if (adminEmail && email.toLowerCase().trim() === adminEmail.toLowerCase().trim()) {
-      return adminUser;
+    if (error || !data) {
+      return undefined;
     }
+
+    return {
+      id: data.id,
+      username: data.username || '',
+      email: data.email || '',
+      password: data.password || '', // Password hash dari database
+      role: (data.role || 'unemployees').trim(), // Trim whitespace dari role
+      createdAt: data.created_at || new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error('Error finding user by username:', error);
+    return undefined;
   }
+}
 
-  const users = readUsers();
-  // Email di database sudah di-hash, jadi kita perlu hash email yang dicari juga
-  const hashedEmail = hashEmail(email);
-  
-  return users.find(user => {
-    // Jika email di database adalah hash (64 karakter hex), compare dengan hash
-    if (/^[a-f0-9]{64}$/i.test(user.email)) {
-      return user.email === hashedEmail;
+export async function findUserById(id: string): Promise<User | undefined> {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !data) {
+      return undefined;
     }
-    // Backward compatibility: jika email masih plain, compare plain
-    return user.email.toLowerCase() === email.toLowerCase();
-  });
+
+    return {
+      id: data.id,
+      username: data.username || '',
+      email: data.email || '',
+      password: data.password || '', // Password hash dari database
+      role: (data.role || 'unemployees').trim(), // Trim whitespace dari role
+      createdAt: data.created_at || new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error('Error finding user by id:', error);
+    return undefined;
+  }
 }
 
-export function findUserByUsername(username: string): User | undefined {
-  const users = readUsers();
-  return users.find(user => user.username.toLowerCase() === username.toLowerCase());
-}
-
-export function findUserById(id: string): User | undefined {
-  const users = readUsers();
-  return users.find(user => user.id === id);
-}
-
-// Validasi user untuk login (dengan hash comparison, termasuk admin dari env)
+// Validasi user untuk login (menggunakan credentials dari .env)
 // Return: { user: User | null, error: 'EMAIL_NOT_FOUND' | 'PASSWORD_WRONG' | 'NOT_ADMIN' | null }
 export async function validateUser(email: string, password: string): Promise<{ user: User | null; error: 'EMAIL_NOT_FOUND' | 'PASSWORD_WRONG' | 'NOT_ADMIN' | null }> {
-  const user = findUserByEmail(email);
-  
-  if (!user) {
-    return { user: null, error: 'EMAIL_NOT_FOUND' };
-  }
-  
-  // Cek role - hanya admin yang bisa login
-  const userRole = user.role || 'unemployees';
-  if (userRole !== 'admin') {
-    return { user: null, error: 'NOT_ADMIN' };
-  }
-  
-  // Jika user adalah admin dari env, compare dengan password dari env
-  if (user.id === 'admin_hardcoded') {
+  try {
+    // Ambil credentials dari environment variables
+    const adminEmail = process.env.ADMIN_EMAIL;
     const adminPassword = process.env.ADMIN_PASSWORD;
-    if (adminPassword && password === adminPassword) {
-      return { user, error: null };
+    const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+    
+    // Validasi environment variables
+    if (!adminEmail || !adminPassword) {
+      console.error('ADMIN_EMAIL or ADMIN_PASSWORD not set in environment variables');
+      return { user: null, error: 'EMAIL_NOT_FOUND' };
     }
-    return { user: null, error: 'PASSWORD_WRONG' };
-  }
-  
-  // Cek apakah password adalah bcrypt hash
-  const isBcryptHash = user.password.startsWith('$2a$') || 
-                       user.password.startsWith('$2b$') || 
-                       user.password.startsWith('$2y$');
-  
-  if (isBcryptHash) {
-    // Password di-hash, gunakan comparePassword
-    const isPasswordValid = await comparePassword(password, user.password);
-    if (isPasswordValid) {
-      return { user, error: null };
+    
+    // Normalize input email
+    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedAdminEmail = adminEmail.toLowerCase().trim();
+    
+    // Cek apakah email cocok dengan admin email
+    if (normalizedEmail !== normalizedAdminEmail) {
+      console.log('Login rejected - email does not match admin email');
+      return { user: null, error: 'EMAIL_NOT_FOUND' };
     }
-    return { user: null, error: 'PASSWORD_WRONG' };
-  } else {
-    // Backward compatibility: password masih plain
-    if (user.password === password) {
-      return { user, error: null };
+
+    // Cek password (plain text comparison)
+    if (password !== adminPassword) {
+      console.log('Login rejected - password does not match');
+      return { user: null, error: 'PASSWORD_WRONG' };
     }
-    return { user: null, error: 'PASSWORD_WRONG' };
+
+    // Buat user object untuk admin dengan hardcoded ID
+    const adminUser: User = {
+      id: 'admin_hardcoded', // Gunakan ID yang konsisten untuk admin
+      username: adminUsername,
+      email: adminEmail,
+      password: '', // Jangan return password
+      role: 'admin',
+      createdAt: new Date().toISOString(),
+    };
+
+    console.log('Admin login successful:', { 
+      email: adminUser.email,
+      username: adminUser.username,
+      role: adminUser.role
+    });
+
+    return { user: adminUser, error: null };
+  } catch (error) {
+    console.error('Error validating user:', error);
+    return { user: null, error: 'EMAIL_NOT_FOUND' };
   }
 }

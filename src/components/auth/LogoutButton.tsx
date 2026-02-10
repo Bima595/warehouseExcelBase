@@ -24,9 +24,14 @@ export default function LogoutButton() {
   };
 
   return (
-    <Button onClick={handleLogout} variant="outline">
+    <Button 
+      onClick={handleLogout} 
+      variant="destructive" 
+      className="relative z-10 cursor-pointer"
+    >
       Logout
     </Button>
   );
 }
+
 

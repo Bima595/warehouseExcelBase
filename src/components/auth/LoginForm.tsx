@@ -3,8 +3,8 @@
 import { useState, useEffect, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
-import { Mail, Lock } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Mail, Lock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InputWithIcon } from '@/components/ui/input-with-icon';
 import { PasswordInputWithIcon } from '@/components/ui/password-input-with-icon';
@@ -17,6 +17,7 @@ export default function LoginForm() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -62,7 +63,9 @@ export default function LoginForm() {
             localStorage.setItem('user', JSON.stringify(result.user));
           }
           
-          // Login berhasil, redirect ke halaman yang diminta
+          // Login berhasil, tampilkan loading overlay
+          setIsRedirecting(true);
+          
           toast({
             variant: 'success',
             title: 'Login Berhasil',
@@ -83,6 +86,7 @@ export default function LoginForm() {
           return;
         }
         // Handle other errors
+        setIsRedirecting(false);
         toast({
           variant: 'destructive',
           title: 'Login Gagal',
@@ -100,69 +104,105 @@ export default function LoginForm() {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-    >
-      <Card className="w-full max-w-md border-2 shadow-lg">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-3xl font-bold tracking-tight">Selamat Datang</CardTitle>
-          <CardDescription className="text-base">
-            Masuk ke akun Anda untuk melanjutkan
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                Email
-              </label>
-              <InputWithIcon
-                id="email"
-                name="email"
-                type="email"
-                placeholder="nama@example.com"
-                value={formData.email}
-                onChange={handleChange}
-                required
-                className="h-11"
-                icon={Mail}
-              />
+    <>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+      >
+        <Card className="w-full max-w-md border-2 shadow-lg">
+          <CardHeader className="space-y-1 text-center">
+            <CardTitle className="text-3xl font-bold tracking-tight">Selamat Datang</CardTitle>
+            <CardDescription className="text-base">
+              Masuk ke akun Anda untuk melanjutkan
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="email" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  Email
+                </label>
+                <InputWithIcon
+                  id="email"
+                  name="email"
+                  type="email"
+                  placeholder="nama@example.com"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  className="h-11"
+                  icon={Mail}
+                  disabled={isPending || isRedirecting}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="password" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  Password
+                </label>
+                <PasswordInputWithIcon
+                  id="password"
+                  name="password"
+                  placeholder="Masukkan password Anda"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  className="h-11"
+                  icon={Lock}
+                  disabled={isPending || isRedirecting}
+                />
+              </div>
+
+              <Button type="submit" className="w-full h-11" disabled={isPending || isRedirecting}>
+                {isPending || isRedirecting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {isRedirecting ? 'Mengalihkan...' : 'Memproses...'}
+                  </>
+                ) : (
+                  'Masuk'
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-6 text-center text-sm">
+              <span className="text-muted-foreground">Belum punya akun? </span>
+              <Link
+                href="/register"
+                className="font-medium text-primary hover:underline transition-colors"
+              >
+                Daftar sekarang
+              </Link>
             </div>
+          </CardContent>
+        </Card>
+      </motion.div>
 
-            <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                Password
-              </label>
-              <PasswordInputWithIcon
-                id="password"
-                name="password"
-                placeholder="Masukkan password Anda"
-                value={formData.password}
-                onChange={handleChange}
-                required
-                className="h-11"
-                icon={Lock}
-              />
-            </div>
-
-            <Button type="submit" className="w-full h-11" disabled={isPending}>
-              {isPending ? 'Memproses...' : 'Masuk'}
-            </Button>
-          </form>
-
-          <div className="mt-6 text-center text-sm">
-            <span className="text-muted-foreground">Belum punya akun? </span>
-            <Link
-              href="/register"
-              className="font-medium text-primary hover:underline transition-colors"
+      {/* Full-screen loading overlay */}
+      <AnimatePresence>
+        {isRedirecting && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="flex flex-col items-center gap-4 rounded-lg bg-card p-8 shadow-lg border"
             >
-              Daftar sekarang
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <div className="text-center">
+                <h3 className="text-lg font-semibold">Mengalihkan ke Dashboard</h3>
+                <p className="text-sm text-muted-foreground mt-1">Mohon tunggu sebentar...</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

@@ -1,10 +1,4 @@
-import * as XLSX from 'xlsx';
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
-import { join } from 'path';
-import { createId } from '@paralleldrive/cuid2';
-import { getDataFilePath } from './data-path';
-
-const DB_PATH = getDataFilePath('stock.xlsx');
+import { supabase } from './supabase';
 
 export interface Stock {
   id: string;
@@ -19,210 +13,198 @@ export interface Stock {
   updatedAt: string;
 }
 
-export interface StockWithoutDeleted extends Omit<Stock, 'deletedAt'> {}
+export type StockWithoutDeleted = Omit<Stock, 'deletedAt'>;
 
-// Inisialisasi file Excel jika belum ada
-function initializeExcel(): void {
+// Baca semua stock dari Supabase (tanpa yang di-delete)
+export async function readStocks(): Promise<StockWithoutDeleted[]> {
   try {
-    // Ensure data directory exists (getDataDir handles this)
-    getDataFilePath('stock.xlsx'); // This will ensure directory exists
+    const { data, error } = await supabase
+      .from('stocks')
+      .select('*')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
 
-    if (!existsSync(DB_PATH)) {
-      const workbook = XLSX.utils.book_new();
-      const worksheet = XLSX.utils.json_to_sheet<Stock>([]);
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Stock');
-      
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-      writeFileSync(DB_PATH, buffer);
+    if (error) {
+      console.error('Error reading stocks:', error);
+      return [];
     }
+
+    return (data || []).map((stock) => ({
+      id: stock.id,
+      namaBarang: stock.nama_barang || '',
+      stock: stock.stock || 0,
+      hargaBeli: stock.harga_beli || 0,
+      hargaJual: stock.harga_jual || 0,
+      gambar: stock.gambar || undefined,
+      qrCode: stock.qr_code || undefined,
+      createdAt: stock.created_at || new Date().toISOString(),
+      updatedAt: stock.updated_at || new Date().toISOString(),
+    }));
   } catch (error) {
-    console.error('Error initializing Stock Excel:', error);
-    throw new Error('Gagal menginisialisasi database stock');
+    console.error('Error reading stocks:', error);
+    return [];
   }
-}
-
-// Baca semua stock dari Excel (tanpa yang di-delete)
-export function readStocks(): StockWithoutDeleted[] {
-  let retries = 3;
-  let lastError: Error | null = null;
-  
-  while (retries > 0) {
-    try {
-      initializeExcel();
-      
-      const fileBuffer = readFileSync(DB_PATH);
-      const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      
-      const stocks = XLSX.utils.sheet_to_json<Stock>(worksheet);
-      
-      // Filter out soft deleted items
-      const activeStocks = stocks
-        .filter(stock => !stock.deletedAt)
-        .map(({ deletedAt, ...stock }) => stock);
-      
-      return activeStocks;
-    } catch (error) {
-      lastError = error as Error;
-      retries--;
-      
-      if (retries > 0) {
-        const waitTime = (4 - retries) * 100;
-        const start = Date.now();
-        while (Date.now() - start < waitTime) {
-          // Busy wait
-        }
-      }
-    }
-  }
-  
-  console.error('Error reading stocks after retries:', lastError);
-  return [];
 }
 
 // Baca semua stock termasuk yang di-delete (untuk admin)
-export function readAllStocks(): Stock[] {
-  let retries = 3;
-  let lastError: Error | null = null;
-  
-  while (retries > 0) {
-    try {
-      initializeExcel();
-      
-      const fileBuffer = readFileSync(DB_PATH);
-      const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      
-      return XLSX.utils.sheet_to_json<Stock>(worksheet);
-    } catch (error) {
-      lastError = error as Error;
-      retries--;
-      
-      if (retries > 0) {
-        const waitTime = (4 - retries) * 100;
-        const start = Date.now();
-        while (Date.now() - start < waitTime) {
-          // Busy wait
-        }
-      }
+export async function readAllStocks(): Promise<Stock[]> {
+  try {
+    const { data, error } = await supabase
+      .from('stocks')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error reading all stocks:', error);
+      return [];
     }
+
+    return (data || []).map((stock) => ({
+      id: stock.id,
+      namaBarang: stock.nama_barang || '',
+      stock: stock.stock || 0,
+      hargaBeli: stock.harga_beli || 0,
+      hargaJual: stock.harga_jual || 0,
+      gambar: stock.gambar || undefined,
+      qrCode: stock.qr_code || undefined,
+      deletedAt: stock.deleted_at || undefined,
+      createdAt: stock.created_at || new Date().toISOString(),
+      updatedAt: stock.updated_at || new Date().toISOString(),
+    }));
+  } catch (error) {
+    console.error('Error reading all stocks:', error);
+    return [];
   }
-  
-  console.error('Error reading all stocks after retries:', lastError);
-  return [];
 }
 
-// Tulis stock baru ke Excel
-export function writeStock(stock: Omit<Stock, 'id' | 'createdAt' | 'updatedAt'>): Stock {
-  let retries = 3;
-  let lastError: Error | null = null;
-  
-  while (retries > 0) {
-    try {
-      initializeExcel();
-      
-      const fileBuffer = readFileSync(DB_PATH);
-      const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const stocks = XLSX.utils.sheet_to_json<Stock>(worksheet);
-      
-      const id = createId();
-      const now = new Date().toISOString();
-      
-      const newStock: Stock = {
-        ...stock,
-        id,
-        createdAt: now,
-        updatedAt: now,
-      };
-      
-      stocks.push(newStock);
-      
-      const newWorkbook = XLSX.utils.book_new();
-      const newWorksheet = XLSX.utils.json_to_sheet(stocks);
-      XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, 'Stock');
-      
-      const buffer = XLSX.write(newWorkbook, { type: 'buffer', bookType: 'xlsx' });
-      writeFileSync(DB_PATH, buffer);
-      
-      return newStock;
-    } catch (error) {
-      lastError = error as Error;
-      retries--;
-      
-      if (retries > 0) {
-        const waitTime = (4 - retries) * 100;
-        const start = Date.now();
-        while (Date.now() - start < waitTime) {
-          // Busy wait
-        }
-      }
+// Tulis stock baru ke Supabase
+export async function writeStock(stock: Omit<Stock, 'id' | 'createdAt' | 'updatedAt'>): Promise<Stock> {
+  try {
+    const now = new Date().toISOString();
+    
+    const { data, error } = await supabase
+      .from('stocks')
+      .insert({
+        nama_barang: stock.namaBarang,
+        stock: stock.stock,
+        harga_beli: stock.hargaBeli,
+        harga_jual: stock.hargaJual,
+        gambar: stock.gambar || null,
+        qr_code: stock.qrCode || null,
+        created_at: now,
+        updated_at: now,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error writing stock:', error);
+      throw new Error(`Gagal menyimpan stock ke database: ${error.message}`);
     }
+
+    if (!data) {
+      throw new Error('Gagal menyimpan stock ke database: tidak ada data yang dikembalikan');
+    }
+
+    return {
+      id: data.id,
+      namaBarang: data.nama_barang || '',
+      stock: data.stock || 0,
+      hargaBeli: data.harga_beli || 0,
+      hargaJual: data.harga_jual || 0,
+      gambar: data.gambar || undefined,
+      qrCode: data.qr_code || undefined,
+      createdAt: data.created_at || now,
+      updatedAt: data.updated_at || now,
+    };
+  } catch (error) {
+    console.error('Error writing stock:', error);
+    throw error instanceof Error ? error : new Error('Gagal menyimpan stock ke database');
   }
-  
-  console.error('Error writing stock after retries:', lastError);
-  throw new Error('Gagal menyimpan stock ke database. Pastikan file Excel tidak sedang dibuka.');
 }
 
 // Update stock
-export function updateStock(id: string, updates: Partial<Omit<Stock, 'id' | 'createdAt'>>): Stock {
-  let retries = 3;
-  let lastError: Error | null = null;
-  
-  while (retries > 0) {
-    try {
-      initializeExcel();
-      
-      const fileBuffer = readFileSync(DB_PATH);
-      const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const stocks = XLSX.utils.sheet_to_json<Stock>(worksheet);
-      
-      const index = stocks.findIndex(stock => stock.id === id);
-      if (index === -1) {
-        throw new Error('Stock tidak ditemukan');
-      }
-      
-      stocks[index] = {
-        ...stocks[index],
-        ...updates,
-        updatedAt: new Date().toISOString(),
-      };
-      
-      const newWorkbook = XLSX.utils.book_new();
-      const newWorksheet = XLSX.utils.json_to_sheet(stocks);
-      XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, 'Stock');
-      
-      const buffer = XLSX.write(newWorkbook, { type: 'buffer', bookType: 'xlsx' });
-      writeFileSync(DB_PATH, buffer);
-      
-      return stocks[index];
-    } catch (error) {
-      lastError = error as Error;
-      retries--;
-      
-      if (retries > 0) {
-        const waitTime = (4 - retries) * 100;
-        const start = Date.now();
-        while (Date.now() - start < waitTime) {
-          // Busy wait
-        }
-      }
+export async function updateStock(id: string, updates: Partial<Omit<Stock, 'id' | 'createdAt'>>): Promise<Stock> {
+  try {
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (updates.namaBarang !== undefined) updateData.nama_barang = updates.namaBarang;
+    if (updates.stock !== undefined) updateData.stock = updates.stock;
+    if (updates.hargaBeli !== undefined) updateData.harga_beli = updates.hargaBeli;
+    if (updates.hargaJual !== undefined) updateData.harga_jual = updates.hargaJual;
+    if (updates.gambar !== undefined) updateData.gambar = updates.gambar || null;
+    if (updates.qrCode !== undefined) updateData.qr_code = updates.qrCode || null;
+    if (updates.deletedAt !== undefined) updateData.deleted_at = updates.deletedAt || null;
+
+    const { data, error } = await supabase
+      .from('stocks')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating stock:', error);
+      throw new Error(`Gagal mengupdate stock: ${error.message}`);
     }
+
+    if (!data) {
+      throw new Error('Stock tidak ditemukan');
+    }
+
+    return {
+      id: data.id,
+      namaBarang: data.nama_barang || '',
+      stock: data.stock || 0,
+      hargaBeli: data.harga_beli || 0,
+      hargaJual: data.harga_jual || 0,
+      gambar: data.gambar || undefined,
+      qrCode: data.qr_code || undefined,
+      deletedAt: data.deleted_at || undefined,
+      createdAt: data.created_at || new Date().toISOString(),
+      updatedAt: data.updated_at || new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error('Error updating stock:', error);
+    throw error instanceof Error ? error : new Error('Gagal mengupdate stock');
   }
-  
-  console.error('Error updating stock after retries:', lastError);
-  throw new Error('Gagal mengupdate stock. Pastikan file Excel tidak sedang dibuka.');
 }
 
 // Soft delete stock
-export function deleteStock(id: string): void {
-  updateStock(id, { deletedAt: new Date().toISOString() });
+export async function deleteStock(id: string): Promise<void> {
+  await updateStock(id, { deletedAt: new Date().toISOString() });
 }
 
 // Cari stock berdasarkan ID
-export function findStockById(id: string): Stock | undefined {
-  const stocks = readAllStocks();
-  return stocks.find(stock => stock.id === id);
+export async function findStockById(id: string): Promise<Stock | undefined> {
+  try {
+    const { data, error } = await supabase
+      .from('stocks')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !data) {
+      return undefined;
+    }
+
+    return {
+      id: data.id,
+      namaBarang: data.nama_barang || '',
+      stock: data.stock || 0,
+      hargaBeli: data.harga_beli || 0,
+      hargaJual: data.harga_jual || 0,
+      gambar: data.gambar || undefined,
+      qrCode: data.qr_code || undefined,
+      deletedAt: data.deleted_at || undefined,
+      createdAt: data.created_at || new Date().toISOString(),
+      updatedAt: data.updated_at || new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error('Error finding stock by id:', error);
+    return undefined;
+  }
 }
 

@@ -7,7 +7,7 @@ import { findStockById } from '@/lib/stock-db';
 export async function getDashboardStats() {
   try {
     // Ambil semua stock
-    const stocks = readStocks();
+    const stocks = await readStocks();
     
     // Hitung total nilai inventory (berdasarkan harga beli)
     const totalStockValue = stocks.reduce((sum, stock) => {
@@ -15,7 +15,7 @@ export async function getDashboardStats() {
     }, 0);
 
     // Ambil semua transaksi (non-cancelled)
-    const transactions = readTransactions();
+    const transactions = await readTransactions();
     
     // Hitung total penjualan
     const totalSales = transactions.reduce((sum, transaction) => {
@@ -25,23 +25,26 @@ export async function getDashboardStats() {
     // Hitung total pembelian (dari items yang terjual)
     // Kita perlu menghitung berdasarkan items yang terjual dan harga beli-nya
     let totalPembelian = 0;
-    transactions.forEach(transaction => {
+    for (const transaction of transactions) {
       if (transaction.items && Array.isArray(transaction.items)) {
-        transaction.items.forEach(item => {
-          const stock = findStockById(item.stockId);
+        for (const item of transaction.items) {
+          const stock = await findStockById(item.stockId);
           if (stock) {
             // Hitung harga beli untuk quantity yang terjual
             totalPembelian += item.quantity * stock.hargaBeli;
           }
-        });
+        }
       }
-    });
+    }
 
-    // Laba kotor = total penjualan - total pembelian
+    // Laba kotor = total penjualan - total pembelian (HPP)
     const labaKotor = totalSales - totalPembelian;
 
-    // Laba bersih = laba kotor (untuk sekarang, bisa ditambah potongan lain nanti)
-    const labaBersih = labaKotor;
+    // Laba bersih = laba kotor - biaya operasional
+    // Untuk sekarang, kita asumsikan biaya operasional = 10% dari laba kotor
+    // Atau bisa disesuaikan dengan kebutuhan bisnis
+    const biayaOperasional = labaKotor * 0.1; // 10% dari laba kotor
+    const labaBersih = labaKotor - biayaOperasional;
 
     return {
       success: true,
@@ -71,4 +74,5 @@ export async function getDashboardStats() {
     };
   }
 }
+
 

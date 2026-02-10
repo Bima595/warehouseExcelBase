@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeUser, findUserByEmail, findUserByUsername } from '@/lib/excel-db';
-import { hashPassword, hashEmail } from '@/lib/hash';
+import { hashPassword } from '@/lib/hash';
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,24 +22,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Cek apakah email sudah terdaftar (termasuk admin dari env)
-    let existingUserByEmail;
-    try {
-      existingUserByEmail = findUserByEmail(email);
-      
-      // Cek juga apakah email adalah admin email dari env
-      const adminEmail = process.env.ADMIN_EMAIL;
-      if (adminEmail && email.toLowerCase() === adminEmail.toLowerCase()) {
-        return NextResponse.json(
-          { error: 'Email sudah terdaftar' },
-          { status: 409 }
-        );
-      }
-    } catch (error) {
-      console.error('Error checking email:', error);
-      // Continue jika error, akan di-handle saat write
-    }
-
+    // Cek apakah email sudah terdaftar
+    const existingUserByEmail = await findUserByEmail(email);
     if (existingUserByEmail) {
       return NextResponse.json(
         { error: 'Email sudah terdaftar' },
@@ -47,15 +31,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Cek apakah username sudah terdaftar (dengan error handling)
-    let existingUserByUsername;
-    try {
-      existingUserByUsername = findUserByUsername(username);
-    } catch (error) {
-      console.error('Error checking username:', error);
-      // Continue jika error, akan di-handle saat write
-    }
-
+    // Cek apakah username sudah terdaftar
+    const existingUserByUsername = await findUserByUsername(username);
     if (existingUserByUsername) {
       return NextResponse.json(
         { error: 'Username sudah terdaftar' },
@@ -63,17 +40,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash password dan email di server side sebelum disimpan
+    // Hash password sebelum disimpan
     const hashedPassword = await hashPassword(password);
-    const hashedEmail = hashEmail(email);
-    
-    // Buat user baru dengan role default "unemployees"
-    // Password dan email sudah di-hash di server side
-    const newUser = writeUser({
-      username,
-      email: hashedEmail, // Email sudah di-hash
+
+    // Simpan user baru ke tabel users dengan password yang sudah di-hash
+    const newUser = await writeUser({
+      username: username.trim(),
+      email: email.toLowerCase().trim(),
       password: hashedPassword, // Password sudah di-hash
-      role: 'unemployees', // Role default untuk user yang register
+      role: 'unemployees',
     });
 
     // Hapus password dari response
@@ -99,4 +74,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

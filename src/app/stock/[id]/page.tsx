@@ -14,7 +14,7 @@ export default async function StockDetailPage({
   }
 
   const { id } = await params;
-  const stock = findStockById(id);
+  const stock = await findStockById(id);
 
   if (!stock || stock.deletedAt) {
     redirect('/stock');

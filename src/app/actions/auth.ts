@@ -1,7 +1,7 @@
 'use server';
 
-import { writeUser, findUserByEmail, findUserByUsername, validateUser } from '@/lib/excel-db';
-import { hashPassword, hashEmail } from '@/lib/hash';
+import { findUserByEmail, findUserByUsername, validateUser } from '@/lib/excel-db';
+import { supabase } from '@/lib/supabase';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -21,12 +21,15 @@ export async function registerAction(formData: FormData) {
   }
 
   try {
+    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedUsername = username.trim();
+    
     // Cek apakah email sudah terdaftar
-    const existingUserByEmail = findUserByEmail(email);
+    const existingUserByEmail = await findUserByEmail(normalizedEmail);
     
     // Cek juga apakah email adalah admin email dari env
     const adminEmail = process.env.ADMIN_EMAIL;
-    if (adminEmail && email.toLowerCase() === adminEmail.toLowerCase()) {
+    if (adminEmail && normalizedEmail === adminEmail.toLowerCase().trim()) {
       return { error: 'Email sudah terdaftar' };
     }
 
@@ -35,20 +38,21 @@ export async function registerAction(formData: FormData) {
     }
 
     // Cek apakah username sudah terdaftar
-    const existingUserByUsername = findUserByUsername(username);
+    const existingUserByUsername = await findUserByUsername(normalizedUsername);
     if (existingUserByUsername) {
       return { error: 'Username sudah terdaftar' };
     }
 
-    // Hash password dan email di server side sebelum disimpan
+    // Hash password sebelum disimpan
+    const { hashPassword } = await import('@/lib/hash');
     const hashedPassword = await hashPassword(password);
-    const hashedEmail = hashEmail(email);
-    
-    // Buat user baru dengan role default "unemployees"
-    writeUser({
-      username,
-      email: hashedEmail,
-      password: hashedPassword,
+
+    // Simpan user baru ke tabel users dengan password yang sudah di-hash
+    const { writeUser } = await import('@/lib/excel-db');
+    await writeUser({
+      username: normalizedUsername,
+      email: normalizedEmail,
+      password: hashedPassword, // Password sudah di-hash
       role: 'unemployees',
     });
 

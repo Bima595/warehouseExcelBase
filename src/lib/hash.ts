@@ -23,3 +23,4 @@ export function compareEmail(email: string, hash: string): boolean {
   return emailHash === hash;
 }
 
+

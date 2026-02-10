@@ -38,8 +38,8 @@ export async function createStockAction(formData: FormData) {
       }
     }
 
-    // Simpan stock ke Excel dulu untuk mendapatkan ID
-    const newStock = writeStock({
+    // Simpan stock ke Supabase dulu untuk mendapatkan ID
+    const newStock = await writeStock({
       namaBarang,
       stock,
       hargaBeli,
@@ -52,7 +52,7 @@ export async function createStockAction(formData: FormData) {
     try {
       qrCodePath = await generateStockQR(newStock.id);
       // Update stock dengan QR code path
-      updateStock(newStock.id, { qrCode: qrCodePath });
+      await updateStock(newStock.id, { qrCode: qrCodePath });
     } catch (error) {
       console.error('Error generating QR code:', error);
       // QR code error tidak fatal
@@ -80,7 +80,7 @@ export async function updateStockAction(formData: FormData) {
       return { error: 'Semua field harus diisi' };
     }
 
-    const existingStock = findStockById(id);
+    const existingStock = await findStockById(id);
     if (!existingStock) {
       return { error: 'Stock tidak ditemukan' };
     }
@@ -97,7 +97,7 @@ export async function updateStockAction(formData: FormData) {
       }
     }
 
-    const updatedStock = updateStock(id, {
+    const updatedStock = await updateStock(id, {
       namaBarang,
       stock,
       hargaBeli,
@@ -119,12 +119,12 @@ export async function deleteStockAction(id: string) {
       return { error: 'ID stock tidak valid' };
     }
 
-    const stock = findStockById(id);
+    const stock = await findStockById(id);
     if (!stock) {
       return { error: 'Stock tidak ditemukan' };
     }
 
-    deleteStock(id);
+    await deleteStock(id);
     revalidatePath('/stock');
     return { success: true };
   } catch (error) {
@@ -135,7 +135,7 @@ export async function deleteStockAction(id: string) {
 
 export async function getStocksAction() {
   try {
-    const stocks = readStocks();
+    const stocks = await readStocks();
     return { success: true, stocks };
   } catch (error) {
     console.error('Get stocks error:', error);
