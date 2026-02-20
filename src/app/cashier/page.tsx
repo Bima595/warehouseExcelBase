@@ -200,7 +200,10 @@ function CashierPageContent() {
       <CheckoutDialog
         open={checkoutOpen}
         onOpenChange={setCheckoutOpen}
-        cart={cart}
+        items={cart.map(item => ({
+          stockId: item.stock.id,
+          quantity: item.quantity
+        }))}
         total={getTotal()}
         onSuccess={handleCheckoutSuccess}
       />

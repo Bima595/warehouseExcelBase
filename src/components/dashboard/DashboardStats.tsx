@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 interface DashboardStats {
   totalStockValue: number;
   totalSales: number;
+  dailyTurnover: number;
   totalPembelian: number;
   labaKotor: number;
   labaBersih: number;
@@ -22,6 +23,7 @@ export default function DashboardStats() {
   const [stats, setStats] = useState<DashboardStats>({
     totalStockValue: 0,
     totalSales: 0,
+    dailyTurnover: 0,
     totalPembelian: 0,
     labaKotor: 0,
     labaBersih: 0,
@@ -62,29 +64,38 @@ export default function DashboardStats() {
     {
       title: 'Total Sales',
       value: stats.totalSales,
-      subtitle: `${stats.totalTransactions} Transaksi Berhasil`,
+      subtitle: `${stats.totalTransactions} Total Transaksi`,
       icon: ShoppingCart,
+      color: 'bg-indigo-500',
+      trend: '+Lifetime',
+      isPositive: true
+    },
+    {
+      title: 'Omset Hari Ini',
+      value: stats.dailyTurnover,
+      subtitle: new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' }),
+      icon: DollarSign,
       color: 'bg-emerald-500',
-      trend: '+8%',
+      trend: '+Today',
       isPositive: true
     },
     {
       title: 'Gross Profit',
       value: stats.labaKotor,
-      subtitle: 'Sales - Purchase Cost',
+      subtitle: 'Sales - Modal Barang',
       icon: TrendingUp,
       color: 'bg-amber-500',
-      trend: '+15%',
+      trend: '+Margin',
       isPositive: true
     },
     {
-      title: 'Net Revenue',
+      title: 'Net Profit',
       value: stats.labaBersih,
-      subtitle: 'Total After Deductions',
+      subtitle: 'Gross - 10% Ops.',
       icon: DollarSign,
       color: 'bg-rose-500',
-      trend: '-2%',
-      isPositive: false
+      trend: '+Net',
+      isPositive: true
     }
   ];
 

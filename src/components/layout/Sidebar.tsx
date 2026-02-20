@@ -10,17 +10,14 @@ import {
   History,
   ChevronRight,
   ChevronDown,
-  Menu,
-  X
+  Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from '@/components/ui/sheet';
 
 interface MenuItem {
@@ -56,6 +53,11 @@ const menuItems: MenuItem[] = [
     title: 'History',
     icon: <History className="h-5 w-5" />,
     href: '/history',
+  },
+  {
+    title: 'Settings',
+    icon: <Settings className="h-5 w-5" />,
+    href: '/settings',
   },
 ];
 

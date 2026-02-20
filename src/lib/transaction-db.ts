@@ -13,6 +13,7 @@ export interface Transaction {
   metodePembayaran: 'cash' | 'transfer' | 'qris' | 'debit' | 'kredit';
   kasir?: string; // Username kasir yang melakukan transaksi
   invoicePath?: string; // Path ke file invoice
+  paymentProof?: string; // URL bukti pembayaran QRIS
   cancelledAt?: string; // Untuk soft delete/cancel
   createdAt: string;
 }
@@ -29,6 +30,7 @@ export async function writeTransaction(transaction: Omit<Transaction, 'id' | 'cr
         metode_pembayaran: transaction.metodePembayaran,
         kasir: transaction.kasir || null,
         invoice_path: transaction.invoicePath || null,
+        payment_proof: transaction.paymentProof || null,
         cancelled_at: null,
         created_at: createdAt,
       })

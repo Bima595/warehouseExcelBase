@@ -3,7 +3,6 @@
 import { Edit3, Trash2, QrCode, ImageIcon, TrendingUp, TrendingDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
 import type { StockWithoutDeleted } from '@/lib/stock-db';
@@ -19,7 +18,7 @@ export default function StockCard({ stock, onEdit, onDelete }: StockCardProps) {
   
   return (
     <Card className="group h-full border-none bg-white dark:bg-slate-900 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] transition-all duration-500 rounded-[2.5rem] overflow-hidden flex flex-col">
-      <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+      <div className="relative aspect-4/3 w-full overflow-hidden bg-slate-100 dark:bg-slate-800">
         {stock.gambar ? (
           <Image
             src={stock.gambar}
@@ -57,7 +56,7 @@ export default function StockCard({ stock, onEdit, onDelete }: StockCardProps) {
       <CardContent className="p-8 flex-1 flex flex-col">
         <div className="flex-1 space-y-4">
           <div>
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white line-clamp-2 leading-tight min-h-[3.5rem] group-hover:text-primary transition-colors">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white line-clamp-2 leading-tight min-h-14 group-hover:text-primary transition-colors">
               {stock.namaBarang}
             </h3>
           </div>

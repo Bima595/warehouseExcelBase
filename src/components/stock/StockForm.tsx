@@ -1,11 +1,10 @@
 'use client';
-
-import { useState, useRef } from 'react';
-import { X, Upload, Image as ImageIcon, Check, Loader2, Save } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useRef, useEffect } from 'react';
+import { X, Image as ImageIcon, Loader2, Save } from 'lucide-react';
+import NextImage from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { createStockAction, updateStockAction } from '@/app/actions/stock';
 import type { StockWithoutDeleted } from '@/lib/stock-db';
@@ -19,17 +18,108 @@ interface StockFormProps {
 export default function StockForm({ stock, onClose, onSuccess }: StockFormProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+
+  // Helper untuk format angka (1000 -> 1.000)
+  const formatNumber = (num: number | string): string => {
+    if (num === '' || num === undefined || num === null) return '';
+    const parts = num.toString().split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return parts.join(',');
+  };
+
+  // Helper untuk parse angka (1.000 -> 1000)
+  const parseNumber = (str: string): number | '' => {
+    if (typeof str !== 'string') return str;
+    const cleanStr = str.replace(/\./g, '').replace(/,/g, '.');
+    if (cleanStr === '') return '';
+    const num = parseFloat(cleanStr);
+    return isNaN(num) ? '' : num;
+  };
+
   const [formData, setFormData] = useState({
     namaBarang: stock?.namaBarang || '',
-    stock: stock?.stock || 0,
-    hargaBeli: stock?.hargaBeli || 0,
-    hargaJual: stock?.hargaJual || 0,
+    stock: stock?.stock ? formatNumber(stock.stock) : '',
+    hargaBeli: stock?.hargaBeli ? formatNumber(stock.hargaBeli) : '',
+    hargaJual: stock?.hargaJual ? formatNumber(stock.hargaJual) : '',
   });
   const [imagePreview, setImagePreview] = useState<string | null>(
     stock?.gambar ? stock.gambar : null
   );
   const [imageBase64, setImageBase64] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Refs for cursor management
+  const cursorState = useRef<{ field: string; position: number | null }>({ field: '', position: null });
+
+  // Restore cursor position after render
+  useEffect(() => {
+    if (cursorState.current.field && cursorState.current.position !== null) {
+      const input = document.querySelector(`input[name="${cursorState.current.field}"]`) as HTMLInputElement;
+      if (input) {
+        input.setSelectionRange(cursorState.current.position, cursorState.current.position);
+      }
+      cursorState.current = { field: '', position: null };
+    }
+  }, [formData]);
+
+  const handleNumberChange = (field: keyof typeof formData, value: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    // Current cursor position
+    const selectionStart = e.target.selectionStart || 0;
+    
+    // Count digits before cursor in the NEW value (raw input before formatting)
+    // Actually, we need to track how many digits were before the cursor in the input value
+    // But since we are formatting immediately, we need to map the "raw digit index" to "formatted index"
+    
+    // Simplest robust way: 
+    // 1. Get raw value (digits only).
+    // 2. Format it.
+    // 3. Calculate where the cursor should be based on the *digits* before appropriate index.
+    
+    const cleanValue = value.replace(/[^0-9.,]/g, '');
+    const num = parseNumber(cleanValue);
+    const formatted = formatNumber(num);
+    
+    if (formatted === formData[field]) return; // No change
+
+    // Calculate new cursor position
+    // Count digits to the left of the original cursor in the *input value* (which includes user's new char)
+    const valueBeforeCursor = value.slice(0, selectionStart);
+    const digitsBeforeCursor = valueBeforeCursor.replace(/[^0-9]/g, '').length;
+    
+    // Find index in 'formatted' that has 'digitsBeforeCursor' digits before it
+    let digitsSeen = 0;
+    for (let i = 0; i < formatted.length; i++) {
+        if (/[0-9]/.test(formatted[i])) {
+            digitsSeen++;
+        }
+        if (digitsSeen >= digitsBeforeCursor && /[0-9]/.test(formatted[i])) {
+             break;
+        } else if (digitsSeen === digitsBeforeCursor && !/[0-9]/.test(formatted[i])) {
+            // Case where we are at the target digit count but next char is not a digit (e.g. dot)
+            // We usually want to include the dot if we just typed past it? 
+            // Stick to simple: after the Nth digit.
+        }
+    }
+    
+    // Edge case: if we deleted a digit, we might need to adjust.
+    // But normally, "after N digits" works for addition.
+    // For deletion (backspace), selectionStart moves back.
+    
+    // Let's rely on digits count.
+    let pos = 0;
+    let count = 0;
+    while (pos < formatted.length && count < digitsBeforeCursor) {
+        if (/[0-9]/.test(formatted[pos])) {
+            count++;
+        }
+        pos++;
+    }
+    // If the next char is a dot, move past it? 
+    // Usually standard behavior is to stay after the digit.
+    
+    cursorState.current = { field: field as string, position: pos };
+    setFormData(prev => ({ ...prev, [field]: formatted }));
+  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -84,9 +174,9 @@ export default function StockForm({ stock, onClose, onSuccess }: StockFormProps)
     try {
       const formDataObj = new FormData();
       formDataObj.append('namaBarang', formData.namaBarang);
-      formDataObj.append('stock', formData.stock.toString());
-      formDataObj.append('hargaBeli', formData.hargaBeli.toString());
-      formDataObj.append('hargaJual', formData.hargaJual.toString());
+      formDataObj.append('stock', (parseNumber(formData.stock) || 0).toString());
+      formDataObj.append('hargaBeli', (parseNumber(formData.hargaBeli) || 0).toString());
+      formDataObj.append('hargaJual', (parseNumber(formData.hargaJual) || 0).toString());
       
       if (imageBase64) formDataObj.append('gambar', imageBase64);
       if (stock) {
@@ -104,7 +194,7 @@ export default function StockForm({ stock, onClose, onSuccess }: StockFormProps)
       } else {
         toast({ variant: 'destructive', title: 'Error', description: result.error || 'Failed' });
       }
-    } catch (error) {
+    } catch {
       toast({ variant: 'destructive', title: 'Error', description: 'Internal error' });
     } finally {
       setLoading(false);
@@ -145,32 +235,51 @@ export default function StockForm({ stock, onClose, onSuccess }: StockFormProps)
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Qty Stock</label>
                 <Input
-                  type="number"
+                  type="text"
+                  name="stock"
+                  inputMode="numeric"
                   value={formData.stock}
-                  onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) || 0 })}
+                  onChange={(e) => handleNumberChange('stock', e.target.value, e)}
                   className="h-14 rounded-2xl border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-6 font-bold"
+                  placeholder="0"
                   required
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Harga Beli</label>
-                <Input
-                  type="number"
-                  value={formData.hargaBeli}
-                  onChange={(e) => setFormData({ ...formData, hargaBeli: parseFloat(e.target.value) || 0 })}
-                  className="h-14 rounded-2xl border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-6 font-bold"
-                  required
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-6 pointer-events-none">
+                    <span className="text-slate-500 font-bold text-sm">Rp</span>
+                  </div>
+                  <Input
+                    type="text"
+                    name="hargaBeli"
+                    inputMode="numeric"
+                    value={formData.hargaBeli}
+                    onChange={(e) => handleNumberChange('hargaBeli', e.target.value, e)}
+                    className="h-14 rounded-2xl border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 pl-14 pr-6 font-bold"
+                    placeholder="0"
+                    required
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Harga Jual</label>
-                <Input
-                  type="number"
-                  value={formData.hargaJual}
-                  onChange={(e) => setFormData({ ...formData, hargaJual: parseFloat(e.target.value) || 0 })}
-                  className="h-14 rounded-2xl border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-6 font-bold focus:ring-4 focus:ring-primary/10"
-                  required
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-6 pointer-events-none">
+                    <span className="text-slate-500 font-bold text-sm">Rp</span>
+                  </div>
+                  <Input
+                    type="text"
+                    name="hargaJual"
+                    inputMode="numeric"
+                    value={formData.hargaJual}
+                    onChange={(e) => handleNumberChange('hargaJual', e.target.value, e)}
+                    className="h-14 rounded-2xl border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 pl-14 pr-6 font-bold focus:ring-4 focus:ring-primary/10"
+                    placeholder="0"
+                    required
+                  />
+                </div>
               </div>
             </div>
 
@@ -186,7 +295,7 @@ export default function StockForm({ stock, onClose, onSuccess }: StockFormProps)
               >
                 {imagePreview ? (
                   <>
-                    <img src={imagePreview} className="h-full w-full object-cover" alt="Preview" />
+                    <NextImage src={imagePreview} fill className="object-cover" alt="Preview" />
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
                       <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} className="rounded-xl border-white text-white hover:bg-white hover:text-black">
                         Change
@@ -216,7 +325,7 @@ export default function StockForm({ stock, onClose, onSuccess }: StockFormProps)
             <Button 
               type="submit" 
               disabled={loading} 
-              className="h-16 flex-[2] rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-primary dark:hover:bg-primary hover:text-white transition-all font-black text-xl shadow-2xl shadow-slate-900/20"
+              className="h-16 flex-2 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-primary dark:hover:bg-primary hover:text-white transition-all font-black text-xl shadow-2xl shadow-slate-900/20"
             >
               {loading ? (
                 <Loader2 className="h-6 w-6 animate-spin" />

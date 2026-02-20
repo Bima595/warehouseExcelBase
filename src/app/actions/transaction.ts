@@ -5,15 +5,14 @@ import { updateStock, findStockById } from '@/lib/stock-db';
 import { saveInvoice } from '@/lib/invoice-utils';
 import { getAuthUser } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import { supabase } from '@/lib/supabase'; // Need direct access for upload
 
-export interface CheckoutItem {
-  stockId: string;
-  quantity: number;
-}
+import type { CheckoutItem } from '@/types/transaction';
 
 export async function checkoutAction(
   items: CheckoutItem[],
-  metodePembayaran: 'cash' | 'transfer' | 'qris' | 'debit' | 'kredit'
+  metodePembayaran: 'cash' | 'transfer' | 'qris' | 'debit' | 'kredit',
+  proofImage?: string | null
 ) {
   try {
     if (!items || items.length === 0) {
@@ -63,12 +62,41 @@ export async function checkoutAction(
     const currentUser = await getAuthUser();
     const kasirUsername = currentUser?.username || 'Unknown';
 
+    // Upload proof image if exists
+    let paymentProofUrl: string | undefined;
+    if (proofImage && metodePembayaran === 'qris') {
+      try {
+        const base64Data = proofImage.split(',')[1];
+        const buffer = Buffer.from(base64Data, 'base64');
+        const fileName = `qris-${Date.now()}.jpg`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('stock-images') // Reusing bucket for now
+          .upload(fileName, buffer, {
+            contentType: 'image/jpeg',
+            upsert: false
+          });
+
+        if (uploadError) {
+          console.error('Upload proof error:', uploadError);
+        } else if (uploadData) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('stock-images')
+            .getPublicUrl(fileName);
+          paymentProofUrl = publicUrl;
+        }
+      } catch (e) {
+        console.error('Error processing proof image:', e);
+      }
+    }
+
     // Simpan transaksi
     const transaction = await writeTransaction({
       items: transactionItems,
       total,
       metodePembayaran,
       kasir: kasirUsername,
+      paymentProof: paymentProofUrl,
     });
 
     // Generate dan save invoice

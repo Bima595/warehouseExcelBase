@@ -22,15 +22,26 @@ export async function getDashboardStats() {
       return sum + (transaction.total || 0);
     }, 0);
 
-    // Hitung total pembelian (dari items yang terjual)
-    // Kita perlu menghitung berdasarkan items yang terjual dan harga beli-nya
+    // Hitung Omset Hari Ini
+    const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
+    const dailyTurnover = transactions.reduce((sum, transaction) => {
+      const transactionDate = new Date(transaction.createdAt).toISOString().split('T')[0];
+      if (transactionDate === today) {
+        return sum + (transaction.total || 0);
+      }
+      return sum;
+    }, 0);
+
+    // Hitung total pembelian (HPP) dari items yang terjual
     let totalPembelian = 0;
     for (const transaction of transactions) {
       if (transaction.items && Array.isArray(transaction.items)) {
         for (const item of transaction.items) {
-          const stock = await findStockById(item.stockId);
+          // Cari stock untuk mendapatkan harga beli saat ini
+          // Idealnya harga beli disimpan di transaction history untuk snapshot
+          // Tapi karena belum ada, kita pakai harga beli saat ini dari master stock
+          const stock = stocks.find(s => s.id === item.stockId);
           if (stock) {
-            // Hitung harga beli untuk quantity yang terjual
             totalPembelian += item.quantity * stock.hargaBeli;
           }
         }
@@ -41,9 +52,8 @@ export async function getDashboardStats() {
     const labaKotor = totalSales - totalPembelian;
 
     // Laba bersih = laba kotor - biaya operasional
-    // Untuk sekarang, kita asumsikan biaya operasional = 10% dari laba kotor
-    // Atau bisa disesuaikan dengan kebutuhan bisnis
-    const biayaOperasional = labaKotor * 0.1; // 10% dari laba kotor
+    // Kita asumsikan biaya operasional = 10% dari laba kotor
+    const biayaOperasional = labaKotor * 0.1;
     const labaBersih = labaKotor - biayaOperasional;
 
     return {
@@ -51,6 +61,7 @@ export async function getDashboardStats() {
       stats: {
         totalStockValue,
         totalSales,
+        dailyTurnover, // New field
         totalPembelian,
         labaKotor,
         labaBersih,
@@ -65,6 +76,7 @@ export async function getDashboardStats() {
       stats: {
         totalStockValue: 0,
         totalSales: 0,
+        dailyTurnover: 0,
         totalPembelian: 0,
         labaKotor: 0,
         labaBersih: 0,

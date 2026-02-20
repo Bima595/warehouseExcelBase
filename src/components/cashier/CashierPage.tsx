@@ -10,8 +10,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
-  SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { useToast } from '@/hooks/use-toast';
@@ -19,7 +17,7 @@ import { getStocksAction } from '@/app/actions/stock';
 import type { StockWithoutDeleted } from '@/lib/stock-db';
 import Image from 'next/image';
 import CheckoutDialog from './CheckoutDialog';
-import { useCart } from '@/hooks/use-cart';
+import { useCart, type CartItem } from '@/hooks/use-cart';
 
 export default function CashierPage() {
   const searchParams = useSearchParams();
@@ -188,7 +186,10 @@ export default function CashierPage() {
       <CheckoutDialog
         open={checkoutOpen}
         onOpenChange={setCheckoutOpen}
-        cart={cart}
+        items={cart.map((item) => ({
+          stockId: item.stock.id,
+          quantity: item.quantity
+        }))}
         total={getTotal()}
         onSuccess={handleCheckoutSuccess}
       />
@@ -212,7 +213,7 @@ function ProductCard({ stock, cartQuantity, onAdd, onUpdate }: {
       className="group relative"
     >
       <Card className="h-full border-none bg-white dark:bg-slate-900 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_24px_rgba(0,0,0,0.08)] transition-all duration-300 rounded-[2rem] overflow-hidden">
-        <div className="relative aspect-[4/3] overflow-hidden">
+        <div className="relative aspect-4/3 overflow-hidden">
           {stock.gambar ? (
             <Image
               src={stock.gambar}
@@ -243,7 +244,7 @@ function ProductCard({ stock, cartQuantity, onAdd, onUpdate }: {
 
         <CardContent className="p-6">
           <div className="mb-4">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 line-clamp-2 leading-tight min-h-[2.75rem]">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 line-clamp-2 leading-tight min-h-11">
               {stock.namaBarang}
             </h3>
             <p className="text-2xl font-black text-primary tracking-tighter mt-1">
@@ -294,7 +295,15 @@ function ProductCard({ stock, cartQuantity, onAdd, onUpdate }: {
   );
 }
 
-function CartSidebarContent({ cart, updateQuantity, removeFromCart, total, onCheckout }: any) {
+interface CartSidebarContentProps {
+  cart: CartItem[];
+  updateQuantity: (stockId: string, delta: number) => void;
+  removeFromCart: (stockId: string) => void;
+  total: number;
+  onCheckout: () => void;
+}
+
+function CartSidebarContent({ cart, updateQuantity, removeFromCart, total, onCheckout }: CartSidebarContentProps) {
   return (
     <div className="flex flex-col h-full">
       <div className="p-8 border-b border-slate-200/60 dark:border-slate-800/60">
@@ -323,7 +332,7 @@ function CartSidebarContent({ cart, updateQuantity, removeFromCart, total, onChe
               <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Keranjang Kosong</p>
             </motion.div>
           ) : (
-            cart.map((item: any) => (
+            cart.map((item) => (
               <motion.div
                 key={item.stock.id}
                 layout

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Download, Printer, X, Eye, Calendar } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { Download, Printer, Eye, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
@@ -19,20 +19,11 @@ export default function HistoryPage() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [transactionToCancel, setTransactionToCancel] = useState<string | null>(null);
 
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
     setLoading(true);
     try {
       const result = await getTransactionsAction();
       if (result.success && result.transactions) {
-        // Debug: Log transactions to check items
-        console.log('Loaded transactions:', result.transactions);
-        result.transactions.forEach((t: Transaction, idx: number) => {
-          console.log(`Transaction ${idx}:`, {
-            id: t.id,
-            itemsCount: t.items?.length || 0,
-            items: t.items,
-          });
-        });
         setTransactions(result.transactions);
       } else {
         toast({
@@ -42,8 +33,8 @@ export default function HistoryPage() {
         });
       }
     } catch (error) {
-      console.error('Error loading transactions:', error);
-      toast({
+       console.error(error);
+       toast({
         variant: 'destructive',
         title: 'Error',
         description: 'Terjadi kesalahan saat memuat data transaksi',
@@ -51,11 +42,11 @@ export default function HistoryPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     loadTransactions();
-  }, []);
+  }, [loadTransactions]);
 
   const handlePreview = (invoicePath: string) => {
     setSelectedInvoice(invoicePath);
@@ -83,7 +74,7 @@ export default function HistoryPage() {
           });
         })
         .catch(error => {
-          console.error('Error downloading invoice:', error);
+          console.error(error);
           toast({
             variant: 'destructive',
             title: 'Error',
@@ -142,8 +133,8 @@ export default function HistoryPage() {
           }
         })
         .catch(error => {
-          console.error('Error printing invoice:', error);
-          toast({
+           console.error(error);
+           toast({
             variant: 'destructive',
             title: 'Error',
             description: 'Gagal mencetak invoice',
@@ -177,7 +168,8 @@ export default function HistoryPage() {
         });
       }
     } catch (error) {
-      toast({
+       console.error(error);
+       toast({
         variant: 'destructive',
         title: 'Error',
         description: 'Terjadi kesalahan saat membatalkan transaksi',
@@ -276,9 +268,9 @@ export default function HistoryPage() {
                 <CardContent className="pt-0">
                   <div className="space-y-3">
                     <div className="border-t pt-3">
-                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                      <div className="space-y-2">
                         {transaction.items && Array.isArray(transaction.items) && transaction.items.length > 0 ? (
-                          transaction.items.map((item: any, index: number) => (
+                          transaction.items.map((item: { namaBarang: string; quantity: number; hargaJual: number; subtotal: number }, index: number) => (
                             <div
                               key={`${transaction.id}-item-${index}`}
                               className="flex items-center justify-between text-sm"
@@ -331,17 +323,20 @@ export default function HistoryPage() {
                           <Printer className="h-3 w-3 sm:h-4 sm:w-4" />
                           <span className="hidden sm:inline">Print</span>
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleCancel(transaction.id)}
-                          className="gap-2 text-xs sm:text-sm text-destructive hover:text-destructive"
-                        >
-                          <X className="h-3 w-3 sm:h-4 sm:w-4" />
-                          <span className="hidden sm:inline">Cancel</span>
-                        </Button>
                       </div>
                     )}
+                    
+                    <div className="flex justify-end pt-2 border-t">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleCancel(transaction.id)}
+                          className="gap-2 text-xs sm:text-sm text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 sm:h-4 sm:w-4"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                          <span className="hidden sm:inline font-medium">Batalkan</span>
+                        </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
